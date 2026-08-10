@@ -11,10 +11,7 @@
   "workers": {
     "workshop":         { "name": "powerfarm-backend" },
     "router":           { "name": "powerfarm",
-                          "route": { "customDomain": "app.powerfarm.app" } },
-                          // apex powerfarm.app segue preso atras de uma app do
-                          // Cloudflare Access (team ubl-ops) que so voce pode apagar.
-                          // Apagada ela, e so trocar de volta para "powerfarm.app".
+                          "route": { "customDomain": "powerfarm.app" } },
     "context":          { "name": "powerfarm-gk-context" },
     "scheduler":        { "name": "powerfarm-gk-scheduler" },
     "customGatekeeper": { "name": "powerfarm-gk-custom" },
