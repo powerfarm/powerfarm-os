@@ -28,12 +28,16 @@
 
   // Desligado no começo: exige o secret CF_AI_GATEWAY_API_TOKEN.
   // Depois: enabled true, name "powerfarm-ai", providers ["cloudflare"].
+  // Modelo custeado pelo deployment. Mesmo Workers AI exige o secret
+  // CF_AI_GATEWAY_API_TOKEN, porque o transporte do modelo e HTTPS.
+  // mode "direct" chama o REST do Workers AI sem passar pelo AI Gateway:
+  // o gateway powerfarm-ai esta com autenticacao propria e devolve 401.
   "aiGateway": {
-    "enabled": false,
+    "enabled": true,
     "name": "powerfarm-ai",
     "accountId": "1f43a14fe5bb62b97e7262c5b6b7c476",
     "providers": ["cloudflare"],
-    "workersAi": { "mode": "gateway", "gateway": "powerfarm-ai" }
+    "workersAi": { "mode": "direct" }
   },
 
   "context": { "sharingDomain": "production", "kvNamespaceId": "2726f4db978249a6aa7cccee6ccdcf67" },

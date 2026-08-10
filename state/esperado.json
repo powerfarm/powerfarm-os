@@ -38,6 +38,30 @@
           "target": null
         },
         {
+          "name": "CF_AI_GATEWAY_ACCOUNT_ID",
+          "type": "plain_text",
+          "target": null,
+          "text": "1f43a14fe5bb62b97e7262c5b6b7c476"
+        },
+        {
+          "name": "CF_AI_GATEWAY_PROVIDERS",
+          "type": "plain_text",
+          "target": null,
+          "text": "cloudflare"
+        },
+        {
+          "name": "CF_AI_GATEWAY_WAI_DIRECT",
+          "type": "plain_text",
+          "target": null,
+          "text": "true"
+        },
+        {
+          "name": "CF_AI_GATEWAY",
+          "type": "plain_text",
+          "target": null,
+          "text": "powerfarm-ai"
+        },
+        {
           "name": "ERROR_REPORTER",
           "type": "service",
           "target": "powerfarm-error-reporter",
