@@ -20,17 +20,17 @@
         {
           "name": "AVATARS",
           "type": "kv_namespace",
-          "target": null
+          "target": "c302d198a6a0482ab1523b8734fc2f73"
         },
         {
           "name": "BLUEPRINT_CONTENT",
           "type": "r2_bucket",
-          "target": null
+          "target": "powerfarm-blueprint-content"
         },
         {
           "name": "BLUEPRINTS",
           "type": "kv_namespace",
-          "target": null
+          "target": "a24df214ae00404c9c75c3029ba72e87"
         },
         {
           "name": "BROWSER",
@@ -84,7 +84,7 @@
         {
           "name": "CONTEXT_COLLECTIONS",
           "type": "kv_namespace",
-          "target": null
+          "target": "2726f4db978249a6aa7cccee6ccdcf67"
         }
       ]
     },

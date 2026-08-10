@@ -88,8 +88,10 @@ jobs:
           PUBLIC_URL: ${{ vars.POWERFARM_PUBLIC_URL }}
         run: node scripts/rollback.mjs --from versoes-antes.json --verify
 
+      # Só há incidente se algo chegou a ser escrito. Falha de portão (antes do
+      # deploy) é o sistema funcionando, não incidente.
       - name: Abrir incidente se a recuperação não fechou
-        if: failure()
+        if: failure() && steps.deploy.conclusion != 'skipped'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           gh issue create \
