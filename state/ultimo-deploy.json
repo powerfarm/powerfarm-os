@@ -1,0 +1,30 @@
+{
+  "gravadoEm": "2026-08-10T16:23:23.573Z",
+  "commit": "97ddbddcd882a2063fa95fbe4b644ee0aa9dd75f",
+  "workers": {
+    "powerfarm-backend": {
+      "deploymentId": "a05f4322-0d42-4af6-98a9-619ce4ecdfec",
+      "versionId": "903030cd-dffb-4545-a299-35444180e86f"
+    },
+    "powerfarm": {
+      "deploymentId": "7deeec0c-7a13-4e5f-92b2-2f4db5361373",
+      "versionId": "b084809a-24a6-4c2c-9cbf-25a41a8163f9"
+    },
+    "powerfarm-gk-context": {
+      "deploymentId": "28d9732d-7d15-428b-bda2-c13c76fcd7b8",
+      "versionId": "7c19cd37-f889-49c3-9270-f77afe99f8f0"
+    },
+    "powerfarm-gk-scheduler": {
+      "deploymentId": "9edbc2eb-755b-405c-8e4b-e61f59c9f436",
+      "versionId": "af57b4ca-ae3c-4bd3-9898-ea272f0422fc"
+    },
+    "powerfarm-gk-custom": {
+      "deploymentId": "fb7f06ce-9168-4fe0-b447-718a0cbc7e1d",
+      "versionId": "a9872bfb-5d6e-4459-9f07-6b419ebfd39a"
+    },
+    "powerfarm-error-reporter": {
+      "deploymentId": "eb27ab67-91cd-459f-8d7a-e2bf1b4a4ad5",
+      "versionId": "4bf02c87-4302-45f9-a34a-e337bb3a97e6"
+    }
+  }
+}
