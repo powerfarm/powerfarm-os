@@ -1,5 +1,6 @@
 node_modules/
-packages/*/dist/
-packages/*/.wrangler/
-packages/*/wrangler.prod.jsonc
-deployment.local.jsonc
+wrangler.prod.jsonc
+versoes-antes.json
+drift.txt
+.wrangler/
+.DS_Store

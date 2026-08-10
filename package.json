@@ -1,12 +1,15 @@
 {
-  "name": "cloudflare-os-starter",
+  "name": "powerfarm-os",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "test": "node --test scripts/*.test.mjs && pnpm --filter custom-gatekeeper test && pnpm --filter error-reporter test",
-    "check": "node scripts/deploy.mjs --check",
-    "deploy": "node scripts/deploy.mjs"
+    "check": "node scripts/deploy-powerfarm.mjs --check",
+    "deploy": "node scripts/deploy-powerfarm.mjs",
+    "guards": "node scripts/guards/check-migrations.mjs && node scripts/derive-expected.mjs --check && node scripts/guards/check-bindings.mjs && node scripts/guards/check-admins.mjs",
+    "drift": "node scripts/check-drift.mjs",
+    "esperado": "node scripts/derive-expected.mjs"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.20.1",

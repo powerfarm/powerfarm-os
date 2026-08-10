@@ -1,0 +1,164 @@
+{
+  "derivadoDe": "deployment.jsonc + submodule pinado",
+  "workers": {
+    "powerfarm-backend": {
+      "compatibility_date": "2026-02-02",
+      "compatibility_flags": [
+        "allow_irrevocable_stub_storage",
+        "enhanced_error_serialization",
+        "global_fetch_strictly_public",
+        "nodejs_compat"
+      ],
+      "migration_tag": "v2",
+      "bindings": [
+        {
+          "name": "ADMINS",
+          "type": "plain_text",
+          "target": null,
+          "text": "[\"dan@powerfarm.app\"]"
+        },
+        {
+          "name": "AVATARS",
+          "type": "kv_namespace",
+          "target": null
+        },
+        {
+          "name": "BLUEPRINT_CONTENT",
+          "type": "r2_bucket",
+          "target": null
+        },
+        {
+          "name": "BLUEPRINTS",
+          "type": "kv_namespace",
+          "target": null
+        },
+        {
+          "name": "BROWSER",
+          "type": "browser",
+          "target": null
+        },
+        {
+          "name": "ERROR_REPORTER",
+          "type": "service",
+          "target": "powerfarm-error-reporter",
+          "entrypoint": "ErrorReporter"
+        },
+        {
+          "name": "GATEKEEPER_CONTEXT",
+          "type": "service",
+          "target": "powerfarm-gk-context",
+          "entrypoint": "GatekeeperVendor"
+        },
+        {
+          "name": "GATEKEEPER_CUSTOM",
+          "type": "service",
+          "target": "powerfarm-gk-custom",
+          "entrypoint": "GatekeeperVendor"
+        },
+        {
+          "name": "GATEKEEPER_SCHEDULER",
+          "type": "service",
+          "target": "powerfarm-gk-scheduler",
+          "entrypoint": "GatekeeperVendor"
+        },
+        {
+          "name": "LOADER",
+          "type": "worker_loader",
+          "target": null
+        },
+        {
+          "name": "WORKERS_AI",
+          "type": "ai",
+          "target": null
+        }
+      ]
+    },
+    "powerfarm-gk-context": {
+      "compatibility_date": "2026-02-02",
+      "compatibility_flags": [
+        "allow_irrevocable_stub_storage",
+        "nodejs_compat"
+      ],
+      "migration_tag": "v0",
+      "bindings": [
+        {
+          "name": "CONTEXT_COLLECTIONS",
+          "type": "kv_namespace",
+          "target": null
+        }
+      ]
+    },
+    "powerfarm-gk-scheduler": {
+      "compatibility_date": "2026-02-02",
+      "compatibility_flags": [
+        "allow_irrevocable_stub_storage",
+        "nodejs_als"
+      ],
+      "migration_tag": "v1",
+      "bindings": []
+    },
+    "powerfarm": {
+      "compatibility_date": "2026-02-02",
+      "compatibility_flags": [],
+      "migration_tag": null,
+      "bindings": [
+        {
+          "name": "ASSETS",
+          "type": "assets",
+          "target": null
+        },
+        {
+          "name": "GATEKEEPER_CONTEXT",
+          "type": "service",
+          "target": "powerfarm-gk-context",
+          "entrypoint": "GatekeeperVendor"
+        },
+        {
+          "name": "GATEKEEPER_CUSTOM",
+          "type": "service",
+          "target": "powerfarm-gk-custom",
+          "entrypoint": "GatekeeperVendor"
+        },
+        {
+          "name": "GATEKEEPER_SCHEDULER",
+          "type": "service",
+          "target": "powerfarm-gk-scheduler",
+          "entrypoint": "GatekeeperVendor"
+        },
+        {
+          "name": "WORKSHOP_BACKEND",
+          "type": "service",
+          "target": "powerfarm-backend"
+        }
+      ]
+    },
+    "powerfarm-gk-custom": {
+      "compatibility_date": "2026-08-04",
+      "compatibility_flags": [
+        "allow_irrevocable_stub_storage",
+        "nodejs_compat"
+      ],
+      "migration_tag": "v0",
+      "bindings": [
+        {
+          "name": "CUSTOM_MESSAGE",
+          "type": "plain_text",
+          "target": null,
+          "text": "Regras e contexto do PowerFarm para agentes desta instância."
+        },
+        {
+          "name": "CUSTOM_NAME",
+          "type": "plain_text",
+          "target": null,
+          "text": "PowerFarm"
+        }
+      ]
+    },
+    "powerfarm-error-reporter": {
+      "compatibility_date": "2026-08-04",
+      "compatibility_flags": [],
+      "migration_tag": null,
+      "bindings": []
+    }
+  }
+}

@@ -1,0 +1,61 @@
+# REGRA 6 — código de PR roda SEM nenhum secret de infra.
+# Dois jobs: o que roda código não confiado não tem credencial; o que tem
+# credencial roda script vindo da main, não da branch.
+name: PR
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  # -------------------------------------------------------------------
+  # Código do PR. Zero secrets. Um postinstall malicioso não acha nada.
+  # -------------------------------------------------------------------
+  estatico:
+    runs-on: ubuntu-latest
+    env:
+      POWERFARM_OWNER_EMAIL: ${{ vars.POWERFARM_OWNER_EMAIL }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { submodules: recursive, persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 24 }
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir cloudflare-os install --frozen-lockfile
+
+      - name: REGRA 2 — migration destrutiva aprovada pelo conteúdo
+        run: node scripts/guards/check-migrations.mjs
+      - name: Gerar configs (dry-run)
+        run: pnpm check
+      - name: state/esperado.json em dia com o repo
+        run: node scripts/derive-expected.mjs --check
+      - name: REGRA 3 — nenhum binding some nem troca de alvo
+        run: node scripts/guards/check-bindings.mjs
+      - name: REGRA 4 — admin no fonte E no artefato gerado
+        run: node scripts/guards/check-admins.mjs
+
+      - uses: actions/upload-artifact@v4
+        with: { name: configs-gerados, path: "**/wrangler.prod.jsonc" }
+
+  # -------------------------------------------------------------------
+  # Confiado. Roda scripts da main contra a conta, com token read-only.
+  # Nunca executa código da branch do PR.
+  # -------------------------------------------------------------------
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout da MAIN (não do PR)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 24 }
+      - run: corepack enable && pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: REGRA 1 — produção bate com o esperado
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+        run: node scripts/check-drift.mjs

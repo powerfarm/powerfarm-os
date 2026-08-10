@@ -1,0 +1,2 @@
+declare const TYPES_CODE = "/** Information supplied by the organization operating this CloudflareOS deployment. */\nexport interface CustomDeploymentInfo {\n  name: string;\n  message: string;\n}\n\n/** Example read-only capability provided to the CloudflareOS agent. */\nexport interface CustomSession {\n  /** Returns the deployment's example information after recording an observation. */\n  getDeploymentInfo(): Promise<CustomDeploymentInfo>;\n}\n";
+export default TYPES_CODE;

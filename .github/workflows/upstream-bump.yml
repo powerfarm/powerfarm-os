@@ -1,0 +1,85 @@
+# Acompanha cloudflare/cloudflare-os — NÃO o seu fork. O submodule aponta para
+# o fork, então `origin` é você mesmo: seguir origin seria seguir o próprio rabo.
+name: Upstream
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}   # sem isto, `| tee` engole o exit code
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { submodules: recursive }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 24 }
+      - run: corepack enable && pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Buscar o upstream de verdade
+        id: bump
+        run: |
+          cd cloudflare-os
+          git remote add upstream https://github.com/cloudflare/cloudflare-os.git 2>/dev/null || true
+          git fetch --quiet upstream main
+          ANTES=$(git rev-parse HEAD)
+          DEPOIS=$(git rev-parse upstream/main)
+          if [ "$ANTES" = "$DEPOIS" ]; then
+            echo "mudou=nao" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git checkout --quiet "$DEPOIS"
+          {
+            echo "mudou=sim"
+            echo "antes=${ANTES:0:7}"
+            echo "depois=${DEPOIS:0:7}"
+            echo "commits=$(git rev-list --count "$ANTES..$DEPOIS")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Analisar migrations
+        if: steps.bump.outputs.mudou == 'sim'
+        id: risco
+        run: |
+          set +e
+          SAIDA=$(node scripts/guards/check-migrations.mjs 2>&1); CODIGO=$?
+          set -e
+          echo "codigo=$CODIGO" >> "$GITHUB_OUTPUT"
+          { echo 'texto<<FIM'; echo "$SAIDA"; echo 'FIM'; } >> "$GITHUB_OUTPUT"
+          echo "$SAIDA"
+
+      - name: Abrir PR
+        if: steps.bump.outputs.mudou == 'sim'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          BRANCH=upstream/bump-${{ steps.bump.outputs.depois }}
+          git config user.name  "powerfarm-ci"
+          git config user.email "ci@powerfarm.local"
+          git checkout -B "$BRANCH"
+          git add cloudflare-os
+          git commit -m "chore: cloudflare-os ${{ steps.bump.outputs.antes }} -> ${{ steps.bump.outputs.depois }}"
+          git push --force-with-lease origin "$BRANCH"
+
+          if [ "${{ steps.risco.outputs.codigo }}" = "0" ]; then
+            VEREDITO="Nenhuma migration destrutiva nova. Se os portões ficarem verdes, pode mergear."
+            ROTULOS="upstream"
+          else
+            VEREDITO="**PARE.** Há migration destrutiva não aprovada. Migration não tem rollback: \`wrangler rollback\` reverte código, não dados. Leia antes de qualquer coisa."
+            ROTULOS="upstream,migration-destrutiva"
+          fi
+
+          gh pr create --head "$BRANCH" --label "$ROTULOS" \
+            --title "Upstream: ${{ steps.bump.outputs.antes }} → ${{ steps.bump.outputs.depois }}" \
+            --body "$(printf '%s\n' \
+              '${{ steps.bump.outputs.commits }} commits novos no Cloudflare OS.' \
+              '' \
+              "$VEREDITO" \
+              '' \
+              '<details><summary>Análise de migrations</summary>' '' '```' \
+              '${{ steps.risco.outputs.texto }}' '```' '</details>')"

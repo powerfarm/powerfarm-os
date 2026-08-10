@@ -1,0 +1,124 @@
+# REGRA 5 publicação e ativação em ordem explícita
+# REGRA 7 pontos de volta gravados ANTES de qualquer ativação
+# REGRA 8 falha de deploy OU de smoke dispara recuperação;
+#         recuperação só é declarada boa depois de novo smoke
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-producao
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: producao
+    # Nenhum secret de infra no env do job. Cada step pede o que precisa.
+    # Assim `pnpm install` nunca roda com credencial Cloudflare no ambiente.
+    env:
+      POWERFARM_OWNER_EMAIL: ${{ vars.POWERFARM_OWNER_EMAIL }}
+      PUBLIC_URL: ${{ vars.POWERFARM_PUBLIC_URL }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { submodules: recursive, persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 24 }
+      - run: corepack enable
+
+      # ---- sem credencial nenhuma daqui ----------------------------------
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir cloudflare-os install --frozen-lockfile
+      - name: REGRA 2 — migration destrutiva aprovada pelo conteúdo
+        run: node scripts/guards/check-migrations.mjs
+      - name: Gerar configs (dry-run)
+        run: pnpm check
+      - name: state/esperado.json em dia com o repo
+        run: node scripts/derive-expected.mjs --check
+      - name: REGRA 3 — nenhum binding some nem troca de alvo
+        run: node scripts/guards/check-bindings.mjs
+      - name: REGRA 4 — admin no fonte E no artefato gerado
+        run: node scripts/guards/check-admins.mjs
+
+      # ---- leitura: token read-only, só neste step -----------------------
+      - name: REGRA 1 — produção bate com o esperado pelo repo
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+        run: node scripts/check-drift.mjs
+
+      - name: REGRA 7 — gravar pontos de volta
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+        run: node scripts/record-versions.mjs --out versoes-antes.json
+
+      # ---- escrita: token de deploy, só neste step -----------------------
+      - name: Deploy
+        id: deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: pnpm deploy
+
+      - name: REGRA 8a — todo worker serve a versão deste run
+        id: versoes
+        if: steps.deploy.outcome == 'success'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+        run: node scripts/verify-versions.mjs --antes versoes-antes.json
+
+      - name: REGRA 8b — borda pública responde de verdade
+        id: smoke
+        if: steps.versoes.outcome == 'success'
+        run: node scripts/smoke-test.mjs "$PUBLIC_URL"
+
+      # ---- recuperação: dispara em QUALQUER falha acima do deploy --------
+      # Inclui o caso perigoso: pnpm deploy quebra no meio, smoke nem roda.
+      - name: Recuperar
+        if: failure() && steps.deploy.conclusion != 'skipped'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PUBLIC_URL: ${{ vars.POWERFARM_PUBLIC_URL }}
+        run: node scripts/rollback.mjs --from versoes-antes.json --verify
+
+      - name: Abrir incidente se a recuperação não fechou
+        if: failure()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh issue create \
+            --title "INCIDENTE: deploy falhou em ${GITHUB_SHA::7}" \
+            --label incidente \
+            --body "$(printf '%s\n' \
+              'O deploy falhou e a recuperação automática não confirmou volta ao ar.' \
+              '' \
+              '**Isto precisa de você agora.**' \
+              '' \
+              "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              '' \
+              'O artefato `versoes-antes.json` do run tem o version ID de cada worker.' \
+              'Manual: Dashboard > Workers > worker > Deployments > Rollback.')"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: pontos-de-volta, path: versoes-antes.json, if-no-files-found: warn }
+
+      # ---- registro do que ficou no ar (prova, não fonte da verdade) -----
+      - name: Registrar deploy conhecido
+        if: success()
+        run: |
+          node scripts/record-versions.mjs --out state/ultimo-deploy.json
+          git config user.name  "powerfarm-ci"
+          git config user.email "ci@powerfarm.local"
+          git add state/ultimo-deploy.json
+          git diff --staged --quiet || git commit -m "chore: deploy ${GITHUB_SHA::7}"
+          git push
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}

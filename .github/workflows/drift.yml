@@ -1,0 +1,49 @@
+# REGRA 1 — vigia se a produção saiu do que o repo declara.
+# NÃO reaprende da produção: drift vira issue, e a correção entra por PR.
+name: Drift
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  vigiar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 24 }
+      - run: corepack enable && pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Comparar produção com o esperado
+        id: drift
+        continue-on-error: true
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+        run: node scripts/check-drift.mjs --relatorio drift.txt
+
+      - name: Avisar
+        if: steps.drift.outcome == 'failure'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          TITULO="Drift: produção divergiu do que o repo declara"
+          if gh issue list --state open --label drift --json title \
+             --jq '.[].title' | grep -qxF "$TITULO"; then
+            echo "issue já aberta"; exit 0
+          fi
+          gh issue create --title "$TITULO" --label drift --body "$(printf '%s\n' \
+            'A varredura diária achou diferença entre a produção e o que este repo declara.' \
+            '' \
+            'Quase sempre: alguém mexeu pelo dashboard da Cloudflare.' \
+            '' \
+            '**Não aperte nenhum botão para "aceitar" isto.** A correção entra por PR,' \
+            'para que o Git continue sendo quem manda. Se a mudança do dashboard era certa,' \
+            'traga-a para o `deployment.jsonc` num PR; se era errada, o próximo deploy a desfaz.' \
+            '' \
+            '```' "$(cat drift.txt 2>/dev/null || echo 'sem relatório')" '```')"
