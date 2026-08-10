@@ -119,8 +119,13 @@ jobs:
           git config user.name  "powerfarm-ci"
           git config user.email "ci@powerfarm.local"
           git add state/ultimo-deploy.json
-          git diff --staged --quiet || git commit -m "chore: deploy ${GITHUB_SHA::7}"
-          git push
+          git diff --staged --quiet && exit 0
+          git commit -m "chore: deploy ${GITHUB_SHA::7}"
+          # O checkout usa persist-credentials: false para que a credencial do
+          # GitHub nao exista durante `pnpm install`. Ela entra so aqui, no
+          # unico comando que precisa empurrar.
+          git push "https://x-access-token:${GH_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+          GH_PUSH_TOKEN: ${{ github.token }}
