@@ -59,7 +59,11 @@ export function bindingTriple(b) {
             ?? b.index_name ?? b.queue_name ?? b.database_id ?? null;
   const t = { name: b.name, type: b.type, target: alvo ?? null };
   if (b.type === "service" && b.entrypoint) t.entrypoint = b.entrypoint;
+  // A Cloudflare tipa var de array/objeto como "json" e string como "plain_text".
+  // Normalizamos os dois para o mesmo formato textual, senão ADMINS (um array)
+  // aparece como json de um lado e plain_text do outro e a tripla nunca bate.
   if (b.type === "plain_text") t.text = b.text;
+  if (b.type === "json") t.text = JSON.stringify(b.json);
   return t;
 }
 export const tripleKey = (t) => `${t.name}|${t.type}|${t.target ?? ""}`;
@@ -93,8 +97,11 @@ export function normalizeGenerated(cfg) {
   for (const d of cfg.d1_databases ?? []) add(d.binding, "d1", d.database_id);
   for (const q of cfg.queues?.producers ?? []) add(q.binding, "queue", q.queue);
   for (const o of cfg.durable_objects?.bindings ?? []) add(o.name, "durable_object_namespace", o.class_name);
-  for (const [nome, valor] of Object.entries(cfg.vars ?? {}))
-    add(nome, "plain_text", null, { text: typeof valor === "string" ? valor : JSON.stringify(valor) });
+  for (const [nome, valor] of Object.entries(cfg.vars ?? {})) {
+    const ehTexto = typeof valor === "string";
+    add(nome, ehTexto ? "plain_text" : "json", null,
+        { text: ehTexto ? valor : JSON.stringify(valor) });
+  }
   if (cfg.browser?.binding) add(cfg.browser.binding, "browser", null);
   if (cfg.ai?.binding) add(cfg.ai.binding, "ai", null);
   if (cfg.assets?.binding) add(cfg.assets.binding, "assets", null);

@@ -22,7 +22,7 @@ const lista = (v) => {
 const fonte = config.admins ?? [];
 if (!Array.isArray(fonte) || fonte.length === 0) {
   fail("REGRA 4", "admins está vazio — ninguém abriria o /admin");
-} else if (!fonte.every((e) => typeof e === "string" && e.includes("@"))) {
+} else if (!fonte.every((e) => typeof e === "string" && e.trim().length > 0)) {
   fail("REGRA 4", `admins tem entrada inválida: ${JSON.stringify(fonte)}`);
 } else if (dono && !fonte.includes(dono)) {
   fail("REGRA 4", `${dono} não está em admins`, `  atual: ${fonte.join(", ")}`);

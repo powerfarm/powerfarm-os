@@ -22,7 +22,9 @@
   "deploy": { "twoPhase": false },
 
   // Quem entra no /admin. Protegido pela REGRA 4.
-  "admins": ["dan@powerfarm.app"],
+  "admins": ["danvoulez", "dan@powerfarm.app"],
+  // Login por senha identifica por USERNAME, nao por email. "danvoulez" e a
+  // conta real; o email fica para quando houver login por provedor.
 
   // Desligado no começo: exige o secret CF_AI_GATEWAY_API_TOKEN.
   // Depois: enabled true, name "powerfarm-ai", providers ["cloudflare"].

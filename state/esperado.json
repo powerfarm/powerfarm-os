@@ -13,9 +13,9 @@
       "bindings": [
         {
           "name": "ADMINS",
-          "type": "plain_text",
+          "type": "json",
           "target": null,
-          "text": "[\"dan@powerfarm.app\"]"
+          "text": "[\"danvoulez\",\"dan@powerfarm.app\"]"
         },
         {
           "name": "AVATARS",

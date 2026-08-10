@@ -41,7 +41,7 @@ for (const worker of ownedWorkers(await readDeployment(root))) {
       anotar(`- ${worker}: binding ${nome} aponta para outro lugar`);
       anotar(`    esperado: ${esp.type} -> ${esp.target ?? "(sem alvo)"}`);
       anotar(`    produção: ${real.type} -> ${real.target ?? "(sem alvo)"}`);
-    } else if (esp.type === "plain_text" && real.text !== esp.text) {
+    } else if (esp.text !== undefined && real.text !== esp.text) {
       divergiu = true;
       anotar(`- ${worker}: var ${nome} mudou em produção`);
       anotar(`    esperado: ${esp.text}`);

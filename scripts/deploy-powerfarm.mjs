@@ -135,7 +135,10 @@ async function gerarTudo(config) {
   paraBase.access = {
     issuer: "https://placeholder.cloudflareaccess.com",
     audience: "0".repeat(64),
-    admins: config.admins,
+    // validateConfig do starter exige formato de email em cada admin. No modo
+    // senha a identidade e um username, entao passamos um valor so para a
+    // validacao e reescrevemos ADMINS com a lista real logo abaixo.
+    admins: config.admins.map((a) => (a.includes("@") ? a : `${a}@placeholder.invalid`)),
   };
 
   const bases = {
@@ -150,6 +153,9 @@ async function gerarTudo(config) {
   // Fora do modo Access: sem estas vars o backend serve o próprio login.
   delete gerado.workshop.vars.CF_ACCESS_ISS;
   delete gerado.workshop.vars.CF_ACCESS_AUD;
+
+  // ADMINS real (usernames inclusos), desfazendo o placeholder da validação.
+  gerado.workshop.vars.ADMINS = config.admins;
 
   const gatekeepers = (gerado.workshop.services ?? []).filter((s) => s.binding.startsWith("GATEKEEPER_"));
   delete gerado.workshop.assets;
