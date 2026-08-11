@@ -1,5 +1,5 @@
-# Acompanha cloudflare/cloudflare-os — NÃO o seu fork. O submodule aponta para
-# o fork, então `origin` é você mesmo: seguir origin seria seguir o próprio rabo.
+# Acompanha diretamente cloudflare/cloudflare-os. REGRA 0 garante que o origin
+# do submodule é o upstream oficial; não existe fork intermediário na cadeia.
 name: Upstream
 on:
   schedule:
@@ -22,16 +22,17 @@ jobs:
         with: { submodules: recursive }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 24 }
+      - name: REGRA 0 — core vem do upstream oficial
+        run: node scripts/guards/check-upstream-source.mjs
       - run: corepack enable && pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Buscar o upstream de verdade
+      - name: Buscar upstream oficial
         id: bump
         run: |
           cd cloudflare-os
-          git remote add upstream https://github.com/cloudflare/cloudflare-os.git 2>/dev/null || true
-          git fetch --quiet upstream main
+          git fetch --quiet origin main
           ANTES=$(git rev-parse HEAD)
-          DEPOIS=$(git rev-parse upstream/main)
+          DEPOIS=$(git rev-parse origin/main)
           if [ "$ANTES" = "$DEPOIS" ]; then
             echo "mudou=nao" >> "$GITHUB_OUTPUT"; exit 0
           fi
