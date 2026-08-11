@@ -31,6 +31,8 @@ jobs:
       - run: corepack enable
 
       # ---- sem credencial nenhuma daqui ----------------------------------
+      - name: REGRA 0 — core vem do upstream oficial
+        run: node scripts/guards/check-upstream-source.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir cloudflare-os install --frozen-lockfile
       - name: REGRA 2 — migration destrutiva aprovada pelo conteúdo
