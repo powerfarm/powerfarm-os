@@ -23,6 +23,8 @@ jobs:
       - run: corepack enable
       - name: REGRA 0 — core vem do upstream oficial
         run: node scripts/guards/check-upstream-source.mjs
+      - name: REGRA 0a — starter oficial permanece intacto
+        run: node scripts/guards/check-starter-source.mjs
       - run: pnpm install --frozen-lockfile
       - name: REGRA 0b — contrato Powerfarm preservado
         run: node scripts/guards/check-platform-contract.mjs
