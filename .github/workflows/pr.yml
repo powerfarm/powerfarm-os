@@ -21,6 +21,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 24 }
       - run: corepack enable
+      - name: REGRA 0 — core vem do upstream oficial
+        run: node scripts/guards/check-upstream-source.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir cloudflare-os install --frozen-lockfile
 
@@ -50,7 +52,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@49933ea5288ca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 24 }
       - run: corepack enable && pnpm install --frozen-lockfile --ignore-scripts
 
