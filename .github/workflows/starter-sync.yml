@@ -1,0 +1,63 @@
+name: Starter upstream
+on:
+  schedule:
+    - cron: "30 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: true }
+
+      - name: Comparar biblioteca de deploy com starter oficial
+        id: compare
+        run: |
+          LOCAL=$(git hash-object scripts/deploy.mjs)
+          REMOTE=$(gh api "repos/cloudflare/cloudflare-os-starter/contents/scripts/deploy.mjs?ref=main" --jq '.sha')
+          echo "local=$LOCAL" >> "$GITHUB_OUTPUT"
+          echo "remote=$REMOTE" >> "$GITHUB_OUTPUT"
+          if [ "$LOCAL" = "$REMOTE" ]; then
+            echo "mudou=nao" >> "$GITHUB_OUTPUT"
+          else
+            echo "mudou=sim" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sincronizar arquivo oficial e abrir PR
+        if: steps.compare.outputs.mudou == 'sim'
+        run: |
+          REMOTE="${{ steps.compare.outputs.remote }}"
+          gh api "repos/cloudflare/cloudflare-os-starter/contents/scripts/deploy.mjs?ref=main" --jq '.content' \
+            | tr -d '\n' | base64 --decode > scripts/deploy.mjs
+
+          cat > state/starter-upstream.json <<EOF
+          {
+            "repository": "cloudflare/cloudflare-os-starter",
+            "ref": "main",
+            "deployScriptBlob": "$REMOTE"
+          }
+          EOF
+
+          BRANCH="starter/sync-${REMOTE:0:7}"
+          git config user.name "powerfarm-ci"
+          git config user.email "ci@powerfarm.local"
+          git checkout -B "$BRANCH"
+          git add scripts/deploy.mjs state/starter-upstream.json
+          git commit -m "chore: sync Cloudflare OS starter deploy library"
+          git push --force-with-lease origin "$BRANCH"
+
+          EXISTING=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            echo "PR #$EXISTING já existe"; exit 0
+          fi
+
+          gh pr create --head "$BRANCH" --base main \
+            --title "Starter upstream: deploy.mjs ${REMOTE:0:7}" \
+            --body "Sincronização automática de \`scripts/deploy.mjs\` com \`cloudflare/cloudflare-os-starter@main\`. O arquivo é tratado como código upstream intacto; customizações Powerfarm permanecem em \`scripts/deploy-powerfarm.mjs\`. Merge somente com os portões do PR verdes."

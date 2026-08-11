@@ -31,7 +31,13 @@ jobs:
       - run: corepack enable
 
       # ---- sem credencial nenhuma daqui ----------------------------------
+      - name: REGRA 0 — core vem do upstream oficial
+        run: node scripts/guards/check-upstream-source.mjs
+      - name: REGRA 0a — starter oficial permanece intacto
+        run: node scripts/guards/check-starter-source.mjs
       - run: pnpm install --frozen-lockfile
+      - name: REGRA 0b — contrato Powerfarm preservado
+        run: node scripts/guards/check-platform-contract.mjs
       - run: pnpm --dir cloudflare-os install --frozen-lockfile
       - name: REGRA 2 — migration destrutiva aprovada pelo conteúdo
         run: node scripts/guards/check-migrations.mjs
@@ -45,11 +51,22 @@ jobs:
         run: node scripts/guards/check-admins.mjs
 
       # ---- leitura: token read-only, só neste step -----------------------
-      - name: REGRA 1 — produção bate com o esperado pelo repo
+      # Produção deve bater com o que FOI implantado por último, não com o
+      # estado desejado deste commit que ainda não chegou à produção.
+      - name: Materializar referência do último deploy
+        id: baseline
+        run: |
+          LAST=$(node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync("state/ultimo-deploy.json","utf8")); if(!x.commit) process.exit(2); process.stdout.write(x.commit)')
+          git fetch --quiet --no-tags --depth=1 origin "$LAST"
+          git show "$LAST:state/esperado.json" > /tmp/powerfarm-esperado-ultimo.json
+          echo "commit=$LAST" >> "$GITHUB_OUTPUT"
+          echo "baseline do último deploy: ${LAST:0:12}"
+
+      - name: REGRA 1 — produção bate com o último deploy conhecido
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
-        run: node scripts/check-drift.mjs
+        run: node scripts/check-drift.mjs --esperado /tmp/powerfarm-esperado-ultimo.json
 
       - name: REGRA 7 — gravar pontos de volta
         env:
