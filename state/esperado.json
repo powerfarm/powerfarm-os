@@ -50,10 +50,10 @@
           "text": "cloudflare"
         },
         {
-          "name": "CF_AI_GATEWAY_WAI_DIRECT",
+          "name": "CF_AI_GATEWAY_WAI",
           "type": "plain_text",
           "target": null,
-          "text": "true"
+          "text": "powerfarm-ai"
         },
         {
           "name": "CF_AI_GATEWAY",

@@ -26,18 +26,16 @@
   // Login por senha identifica por USERNAME, nao por email. "danvoulez" e a
   // conta real; o email fica para quando houver login por provedor.
 
-  // Desligado no começo: exige o secret CF_AI_GATEWAY_API_TOKEN.
-  // Depois: enabled true, name "powerfarm-ai", providers ["cloudflare"].
-  // Modelo custeado pelo deployment. Mesmo Workers AI exige o secret
-  // CF_AI_GATEWAY_API_TOKEN, porque o transporte do modelo e HTTPS.
-  // mode "direct" chama o REST do Workers AI sem passar pelo AI Gateway:
-  // o gateway powerfarm-ai esta com autenticacao propria e devolve 401.
+  // Plataforma usa Cloudflare AI Gateway como caminho padrao de IA.
+  // Golden Bridge fica fora do hot path da plataforma e pode continuar como
+  // infraestrutura separada de inferencia/Foundry. O Worker exige o secret
+  // CF_AI_GATEWAY_API_TOKEN e envia Workers AI pelo gateway "powerfarm-ai".
   "aiGateway": {
     "enabled": true,
     "name": "powerfarm-ai",
     "accountId": "1f43a14fe5bb62b97e7262c5b6b7c476",
     "providers": ["cloudflare"],
-    "workersAi": { "mode": "direct" }
+    "workersAi": { "mode": "gateway", "gateway": "powerfarm-ai" }
   },
 
   "context": { "sharingDomain": "production", "kvNamespaceId": "2726f4db978249a6aa7cccee6ccdcf67" },
