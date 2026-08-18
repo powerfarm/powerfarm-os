@@ -27,6 +27,7 @@ export function generatedConfigPaths(config) {
     scheduler: `cloudflare-os/packages/gatekeeper-scheduler/${G}`,
     router: `cloudflare-os/packages/router/${G}`,
     customGatekeeper: `packages/custom-gatekeeper/${G}`,
+    identity: `packages/gatekeeper-identity/${G}`,
     errorReporter: `packages/error-reporter/${G}`,
   };
   const saida = {};

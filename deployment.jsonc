@@ -15,6 +15,7 @@
     "context":          { "name": "powerfarm-gk-context" },
     "scheduler":        { "name": "powerfarm-gk-scheduler" },
     "customGatekeeper": { "name": "powerfarm-gk-custom" },
+    "identity":         { "name": "powerfarm-gk-identity" },
     "errorReporter":    { "name": "powerfarm-error-reporter" }
   },
 

@@ -18,6 +18,12 @@
           "text": "[\"danvoulez\",\"dan@powerfarm.app\"]"
         },
         {
+          "name": "AUTH_GATEKEEPERS",
+          "type": "plain_text",
+          "target": null,
+          "text": "identity"
+        },
+        {
           "name": "AVATARS",
           "type": "kv_namespace",
           "target": "c302d198a6a0482ab1523b8734fc2f73"
@@ -77,6 +83,12 @@
           "name": "GATEKEEPER_CUSTOM",
           "type": "service",
           "target": "powerfarm-gk-custom",
+          "entrypoint": "GatekeeperVendor"
+        },
+        {
+          "name": "GATEKEEPER_IDENTITY",
+          "type": "service",
+          "target": "powerfarm-gk-identity",
           "entrypoint": "GatekeeperVendor"
         },
         {
@@ -161,6 +173,11 @@
           "target": "powerfarm-gk-custom"
         },
         {
+          "name": "GATEKEEPER_IDENTITY",
+          "type": "service",
+          "target": "powerfarm-gk-identity"
+        },
+        {
           "name": "GATEKEEPER_SCHEDULER",
           "type": "service",
           "target": "powerfarm-gk-scheduler"
@@ -191,6 +208,34 @@
           "type": "plain_text",
           "target": null,
           "text": "PowerFarm"
+        }
+      ]
+    },
+    "powerfarm-gk-identity": {
+      "compatibility_date": "2026-08-04",
+      "compatibility_flags": [
+        "allow_irrevocable_stub_storage",
+        "nodejs_compat"
+      ],
+      "migration_tag": "v0",
+      "bindings": [
+        {
+          "name": "BASE_URL",
+          "type": "plain_text",
+          "target": null,
+          "text": "https://powerfarm.app/gatekeeper/identity"
+        },
+        {
+          "name": "CLIENT_ID",
+          "type": "plain_text",
+          "target": null,
+          "text": "79be4b93-d42e-4fd1-b79b-162f62f0b02f"
+        },
+        {
+          "name": "ISSUER",
+          "type": "plain_text",
+          "target": null,
+          "text": "https://wmsrqefgdgcijupeogfa.supabase.co/auth/v1"
         }
       ]
     },

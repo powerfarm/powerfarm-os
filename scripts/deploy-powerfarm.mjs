@@ -34,11 +34,13 @@ const PACOTES = {
   context: { dir: `${OS}/gatekeeper-context`, chave: "context" },
   scheduler: { dir: `${OS}/gatekeeper-scheduler`, chave: "scheduler" },
   customGatekeeper: { dir: "packages/custom-gatekeeper", chave: "customGatekeeper" },
+  identity: { dir: "packages/gatekeeper-identity", chave: "identity" },
   workshop: { dir: `${OS}/workshop-backend`, chave: "workshop" },
   router: { dir: `${OS}/router`, chave: "router" },
 };
 // A ordem do objeto É a ordem de deploy. Folhas primeiro, origem pública por último.
-const ORDEM = ["errorReporter", "context", "scheduler", "customGatekeeper", "workshop", "router"];
+const ORDEM = ["errorReporter", "context", "scheduler", "identity", "customGatekeeper",
+               "workshop", "router"];
 
 // Gatekeepers que podem ter sido instalados pelo fluxo oficial do Cloudflare OS
 // depois do deploy inicial. Eles são runtime state do produto, não topologia
@@ -184,6 +186,12 @@ async function gerarTudo(config) {
   // ADMINS real (usernames inclusos), desfazendo o placeholder da validação.
   gerado.workshop.vars.ADMINS = config.admins;
 
+  // Quem pode conduzir sign-in. O vendor tem de anunciar providesAuth — o
+  // powerfarm-gk-identity anuncia. DISABLE_PASSWORD_AUTH fica de fora de
+  // proposito: enquanto o fluxo novo nao tiver sido usado a valer, a senha
+  // continua a ser a porta que garante que ninguem fica fechado fora.
+  gerado.workshop.vars.AUTH_GATEKEEPERS = "identity";
+
   const gatekeepers = (gerado.workshop.services ?? []).filter((s) => s.binding.startsWith("GATEKEEPER_"));
   delete gerado.workshop.assets;
   gerado.workshop.workers_dev = false;
@@ -191,6 +199,13 @@ async function gerarTudo(config) {
 
   gerado.scheduler = configDoScheduler(
     await lerJsonc(join(root, `${OS}/gatekeeper-scheduler/wrangler.jsonc`)), config);
+
+  // PowerFarm Identity: o gatekeeper que faz sign-in contra o emissor OAuth 2.1
+  // do Supabase. Vive num pacote proprio para o custom-gatekeeper continuar a
+  // ser o exemplo em branco do starter, sem conflito quando o upstream lhe mexer.
+  gerado.identity = configDoScheduler(
+    await lerJsonc(join(root, "packages/gatekeeper-identity/wrangler.jsonc")), config);
+  gerado.identity.name = config.workers.identity.name;
 
   // O deploy service oficial injeta estas URLs como estado da instância. Como
   // este repo assumiu o deploy por Wrangler, passa a declará-las explicitamente
@@ -206,6 +221,11 @@ async function gerarTudo(config) {
       ...(gerado.scheduler.vars ?? {}),
       BASE_URL: `${baseUrl}/gatekeeper/scheduler`,
     };
+    // Sem isto o redirect_uri sai como localhost e o emissor recusa o fluxo.
+    gerado.identity.vars = {
+      ...(gerado.identity.vars ?? {}),
+      BASE_URL: `${baseUrl}/gatekeeper/identity`,
+    };
   }
 
   // O scheduler também precisa estar visível para o backend e para o router.
@@ -214,10 +234,18 @@ async function gerarTudo(config) {
     service: config.workers.scheduler.name,
     entrypoint: "GatekeeperVendor",
   };
-  gerado.workshop.services = [...(gerado.workshop.services ?? []), bindingScheduler];
+  const bindingIdentity = {
+    binding: "GATEKEEPER_IDENTITY",
+    service: config.workers.identity.name,
+    entrypoint: "GatekeeperVendor",
+  };
+  gerado.workshop.services = [
+    ...(gerado.workshop.services ?? []), bindingScheduler, bindingIdentity,
+  ];
 
   gerado.router = configDoRouter(
-    await lerJsonc(join(root, `${OS}/router/wrangler.jsonc`)), config, [...gatekeepers, bindingScheduler]);
+    await lerJsonc(join(root, `${OS}/router/wrangler.jsonc`)), config,
+    [...gatekeepers, bindingScheduler, bindingIdentity]);
 
   return gerado;
 }
