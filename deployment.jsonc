@@ -35,7 +35,7 @@
     "name": "powerfarm-ai",
     "accountId": "1f43a14fe5bb62b97e7262c5b6b7c476",
     "providers": ["cloudflare"],
-    "workersAi": { "mode": "gateway", "gateway": "powerfarm-ai" }
+    "workersAi": { "mode": "direct" }
   },
 
   "context": { "sharingDomain": "production", "kvNamespaceId": "2726f4db978249a6aa7cccee6ccdcf67" },

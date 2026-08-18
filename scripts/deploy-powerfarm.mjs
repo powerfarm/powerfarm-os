@@ -97,12 +97,18 @@ function configDoRouter(base, config, gatekeepersDoBackend) {
 
   // O router acha gatekeeper escaneando os próprios GATEKEEPER_*. Se um binding
   // não estiver aqui, /gatekeeper/<nome>/ cai no SPA e devolve 200 — o connector
-  // morre em silêncio. Por isso espelhamos exatamente os do backend.
+  // morre em silêncio. Por isso espelhamos os do backend.
+  //
+  // MAS sem `entrypoint` e sem `props`: o router encaminha a requisição HTTP
+  // inteira (`env[key].fetch(req)`), e isso só existe no export default do
+  // gatekeeper. GatekeeperVendor é um WorkerEntrypoint de RPC e não tem fetch();
+  // com o entrypoint copiado do backend, /gatekeeper/<nome>/ devolve 500
+  // "Handler does not export a fetch() function" — inclusive os callbacks OAuth.
+  // Mesmo contrato do upstream em scripts/release/manifest-lib.mjs:
+  // backend -> { entrypoint: "GatekeeperVendor" }, router -> { }.
   r.services = [
     { binding: "WORKSHOP_BACKEND", service: config.workers.workshop.name },
-    ...gatekeepersDoBackend.map(({ binding, service, entrypoint, props }) => ({
-      binding, service, ...(entrypoint ? { entrypoint } : {}), ...(props ? { props } : {}),
-    })),
+    ...gatekeepersDoBackend.map(({ binding, service }) => ({ binding, service })),
   ];
 
   r.assets = {
