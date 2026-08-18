@@ -91,6 +91,12 @@
           "target": null
         },
         {
+          "name": "PUBLIC_BASE_URL",
+          "type": "plain_text",
+          "target": null,
+          "text": "https://powerfarm.app"
+        },
+        {
           "name": "WORKERS_AI",
           "type": "ai",
           "target": null
@@ -106,6 +112,12 @@
       "migration_tag": "v0",
       "bindings": [
         {
+          "name": "BASE_URL",
+          "type": "plain_text",
+          "target": null,
+          "text": "https://powerfarm.app/gatekeeper/context"
+        },
+        {
           "name": "CONTEXT_COLLECTIONS",
           "type": "kv_namespace",
           "target": "2726f4db978249a6aa7cccee6ccdcf67"
@@ -119,7 +131,14 @@
         "nodejs_als"
       ],
       "migration_tag": "v1",
-      "bindings": []
+      "bindings": [
+        {
+          "name": "BASE_URL",
+          "type": "plain_text",
+          "target": null,
+          "text": "https://powerfarm.app/gatekeeper/scheduler"
+        }
+      ]
     },
     "powerfarm": {
       "compatibility_date": "2026-02-02",
