@@ -22,6 +22,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "jsonc-parser";
 import { generateConfigs } from "./deploy.mjs";
+import { cfFetch } from "./lib.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const GERADO = "wrangler.prod.jsonc";
@@ -38,6 +39,26 @@ const PACOTES = {
 };
 // A ordem do objeto É a ordem de deploy. Folhas primeiro, origem pública por último.
 const ORDEM = ["errorReporter", "context", "scheduler", "customGatekeeper", "workshop", "router"];
+
+// Gatekeepers que podem ter sido instalados pelo fluxo oficial do Cloudflare OS
+// depois do deploy inicial. Eles são runtime state do produto, não topologia
+// declarativa do Powerfarm. A lista é fechada: qualquer nome novo exige revisão.
+const GATEKEEPERS_GERENCIADOS_PELO_DEPLOY_SERVICE = new Set([
+  "GATEKEEPER_CLOUDFLARE",
+  "GATEKEEPER_CONFLUENCE",
+  "GATEKEEPER_EMAIL",
+  "GATEKEEPER_GITHUB",
+  "GATEKEEPER_GOOGLE",
+  "GATEKEEPER_HOMEASSISTANT",
+  "GATEKEEPER_LINEAR",
+  "GATEKEEPER_MCP_PORTAL",
+  "GATEKEEPER_MCP",
+  "GATEKEEPER_NOTION",
+  "GATEKEEPER_SLACK",
+  "GATEKEEPER_SPOTIFY",
+  "GATEKEEPER_SUPABASE",
+  "GATEKEEPER_ZOOMINFO",
+]);
 
 async function lerJsonc(path) {
   const erros = [];
@@ -165,6 +186,22 @@ async function gerarTudo(config) {
   gerado.scheduler = configDoScheduler(
     await lerJsonc(join(root, `${OS}/gatekeeper-scheduler/wrangler.jsonc`)), config);
 
+  // O deploy service oficial injeta estas URLs como estado da instância. Como
+  // este repo assumiu o deploy por Wrangler, passa a declará-las explicitamente
+  // para que um novo deploy não as apague.
+  if (config.workers.router.route?.customDomain) {
+    const baseUrl = `https://${config.workers.router.route.customDomain}`;
+    gerado.workshop.vars.PUBLIC_BASE_URL = baseUrl;
+    gerado.context.vars = {
+      ...(gerado.context.vars ?? {}),
+      BASE_URL: `${baseUrl}/gatekeeper/context`,
+    };
+    gerado.scheduler.vars = {
+      ...(gerado.scheduler.vars ?? {}),
+      BASE_URL: `${baseUrl}/gatekeeper/scheduler`,
+    };
+  }
+
   // O scheduler também precisa estar visível para o backend e para o router.
   const bindingScheduler = {
     binding: "GATEKEEPER_SCHEDULER",
@@ -177,6 +214,44 @@ async function gerarTudo(config) {
     await lerJsonc(join(root, `${OS}/router/wrangler.jsonc`)), config, [...gatekeepers, bindingScheduler]);
 
   return gerado;
+}
+
+function serviceBindingVivo(binding) {
+  if (binding.type !== "service" ||
+      !GATEKEEPERS_GERENCIADOS_PELO_DEPLOY_SERVICE.has(binding.name) ||
+      typeof binding.service !== "string" || !binding.service) return null;
+  return {
+    binding: binding.name,
+    service: binding.service,
+    ...(binding.environment ? { environment: binding.environment } : {}),
+    ...(binding.entrypoint ? { entrypoint: binding.entrypoint } : {}),
+    ...(binding.props ? { props: binding.props } : {}),
+  };
+}
+
+async function gatekeepersGerenciadosVivos(worker) {
+  const settings = await cfFetch(`/workers/scripts/${worker}/settings`);
+  if (!settings) throw new Error(`${worker}: não existe ao preservar Gatekeepers instalados`);
+  return (settings.bindings ?? []).map(serviceBindingVivo).filter(Boolean);
+}
+
+function mesclarServices(config, extras) {
+  const existentes = new Set((config.services ?? []).map((s) => s.binding));
+  config.services = [
+    ...(config.services ?? []),
+    ...extras.filter((s) => !existentes.has(s.binding)),
+  ];
+}
+
+async function preservarGatekeepersInstalados(gerado, config) {
+  if (check) return;
+  const [backend, router] = await Promise.all([
+    gatekeepersGerenciadosVivos(config.workers.workshop.name),
+    gatekeepersGerenciadosVivos(config.workers.router.name),
+  ]);
+  mesclarServices(gerado.workshop, backend);
+  mesclarServices(gerado.router, router);
+  console.log(`preservando ${backend.length} Gatekeeper(s) dinâmico(s) no backend e ${router.length} no router`);
 }
 
 function construir(config) {
@@ -231,6 +306,7 @@ async function main() {
   const duasFases = config.deploy?.twoPhase === true;
 
   const gerado = await gerarTudo(config);
+  await preservarGatekeepersInstalados(gerado, config);
   const escritos = [];
   try {
     for (const chave of ORDEM) {

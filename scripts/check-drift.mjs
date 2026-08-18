@@ -27,6 +27,37 @@ if (!esperado?.workers || !Object.keys(esperado.workers).length) {
   process.exit(1);
 }
 
+// Estes Gatekeepers são instaláveis pelo fluxo oficial do Cloudflare OS e
+// aparecem como bindings dinâmicos no backend/router. Eles não pertencem ao
+// contrato estático deste repo: o usuário pode habilitar/desabilitar conectores
+// sem um deploy do Powerfarm. A lista é fechada de propósito; um novo binding
+// upstream volta a bloquear a REGRA 1 até ser revisado explicitamente.
+const GATEKEEPERS_GERENCIADOS_PELO_DEPLOY_SERVICE = new Set([
+  "GATEKEEPER_CLOUDFLARE",
+  "GATEKEEPER_CONFLUENCE",
+  "GATEKEEPER_EMAIL",
+  "GATEKEEPER_GITHUB",
+  "GATEKEEPER_GOOGLE",
+  "GATEKEEPER_HOMEASSISTANT",
+  "GATEKEEPER_LINEAR",
+  "GATEKEEPER_MCP_PORTAL",
+  "GATEKEEPER_MCP",
+  "GATEKEEPER_NOTION",
+  "GATEKEEPER_SLACK",
+  "GATEKEEPER_SPOTIFY",
+  "GATEKEEPER_SUPABASE",
+  "GATEKEEPER_ZOOMINFO",
+]);
+
+function extraGerenciadoEmRuntime(worker, nome) {
+  if ((worker === "powerfarm-backend" || worker === "powerfarm") &&
+      GATEKEEPERS_GERENCIADOS_PELO_DEPLOY_SERVICE.has(nome)) return true;
+  if (worker === "powerfarm-backend" && nome === "PUBLIC_BASE_URL") return true;
+  if ((worker === "powerfarm-gk-context" || worker === "powerfarm-gk-scheduler") &&
+      nome === "BASE_URL") return true;
+  return false;
+}
+
 const linhas = [];
 const anotar = (s) => { linhas.push(s); console.error(s); };
 let divergiu = false;
@@ -61,7 +92,10 @@ for (const worker of Object.keys(esperado.workers)) {
     }
   }
   for (const nome of vivos.keys()) {
-    if (!alvos.has(nome)) { divergiu = true; anotar(`- ${worker}: binding ${nome} existe em produção mas a referência não o declara`); }
+    if (!alvos.has(nome) && !extraGerenciadoEmRuntime(worker, nome)) {
+      divergiu = true;
+      anotar(`- ${worker}: binding ${nome} existe em produção mas a referência não o declara`);
+    }
   }
   if (vivo.compatibility_date !== alvo.compatibility_date) {
     divergiu = true;
