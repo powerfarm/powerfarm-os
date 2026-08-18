@@ -24,13 +24,21 @@
 
   // Quem entra no /admin. Protegido pela REGRA 4.
   "admins": ["danvoulez", "dan@powerfarm.app"],
-  // Login por senha identifica por USERNAME, nao por email. "danvoulez" e a
-  // conta real; o email fica para quando houver login por provedor.
-
-  // Plataforma usa Cloudflare AI Gateway como caminho padrao de IA.
-  // Golden Bridge fica fora do hot path da plataforma e pode continuar como
-  // infraestrutura separada de inferencia/Foundry. O Worker exige o secret
-  // CF_AI_GATEWAY_API_TOKEN e envia Workers AI pelo gateway "powerfarm-ai".
+  // DECIDIDO: a plataforma fica SOMENTE com o Cloudflare AI Gateway.
+  //
+  // Os modelos do Workshop sao os do Workers AI, custeados pelo deployment.
+  // Nao se acrescenta aqui provedor externo, e em particular nao se liga a
+  // Golden Bridge do LAB: ela vive em api.powerfarm.app e serve outros
+  // consumidores, nao o seletor de modelos da plataforma.
+  //
+  // Consequencia que vale saber: com aiGateway.enabled=true o frontend so
+  // mostra os provedores de `providers`, e o campo de API URL nem aparece
+  // (packages/workshop-frontend/src/AddModelModal.tsx). E de proposito.
+  //
+  // workersAi.mode "direct" chama o REST do Workers AI sem passar pelo AI
+  // Gateway: o gateway powerfarm-ai tem autenticacao propria e devolve 401.
+  // Mesmo em direct, o secret CF_AI_GATEWAY_API_TOKEN e obrigatorio — o
+  // transporte do modelo e HTTPS, nao binding.
   "aiGateway": {
     "enabled": true,
     "name": "powerfarm-ai",
