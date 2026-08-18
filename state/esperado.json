@@ -50,10 +50,10 @@
           "text": "cloudflare"
         },
         {
-          "name": "CF_AI_GATEWAY_WAI",
+          "name": "CF_AI_GATEWAY_WAI_DIRECT",
           "type": "plain_text",
           "target": null,
-          "text": "powerfarm-ai"
+          "text": "true"
         },
         {
           "name": "CF_AI_GATEWAY",
@@ -153,20 +153,17 @@
         {
           "name": "GATEKEEPER_CONTEXT",
           "type": "service",
-          "target": "powerfarm-gk-context",
-          "entrypoint": "GatekeeperVendor"
+          "target": "powerfarm-gk-context"
         },
         {
           "name": "GATEKEEPER_CUSTOM",
           "type": "service",
-          "target": "powerfarm-gk-custom",
-          "entrypoint": "GatekeeperVendor"
+          "target": "powerfarm-gk-custom"
         },
         {
           "name": "GATEKEEPER_SCHEDULER",
           "type": "service",
-          "target": "powerfarm-gk-scheduler",
-          "entrypoint": "GatekeeperVendor"
+          "target": "powerfarm-gk-scheduler"
         },
         {
           "name": "WORKSHOP_BACKEND",
