@@ -244,6 +244,33 @@
       "compatibility_flags": [],
       "migration_tag": null,
       "bindings": []
+    },
+    "powerfarm-engine": {
+      "compatibility_date": "2026-02-02",
+      "compatibility_flags": [
+        "nodejs_compat",
+        "nodejs_compat_do_not_populate_process_env"
+      ],
+      "migration_tag": null,
+      "bindings": [
+        {
+          "name": "AI",
+          "type": "ai",
+          "target": null
+        },
+        {
+          "name": "SUPABASE_URL",
+          "type": "plain_text",
+          "target": null,
+          "text": "https://wmsrqefgdgcijupeogfa.supabase.co"
+        },
+        {
+          "name": "WORKERS_AI_MODEL",
+          "type": "plain_text",
+          "target": null,
+          "text": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+        }
+      ]
     }
   }
 }

@@ -35,11 +35,12 @@ const PACOTES = {
   scheduler: { dir: `${OS}/gatekeeper-scheduler`, chave: "scheduler" },
   customGatekeeper: { dir: "packages/custom-gatekeeper", chave: "customGatekeeper" },
   identity: { dir: "packages/gatekeeper-identity", chave: "identity" },
+  engine: { dir: "packages/powerfarm-engine", chave: "engine" },
   workshop: { dir: `${OS}/workshop-backend`, chave: "workshop" },
   router: { dir: `${OS}/router`, chave: "router" },
 };
 // A ordem do objeto É a ordem de deploy. Folhas primeiro, origem pública por último.
-const ORDEM = ["errorReporter", "context", "scheduler", "identity", "customGatekeeper",
+const ORDEM = ["errorReporter", "context", "scheduler", "identity", "customGatekeeper", "engine",
                "workshop", "router"];
 
 // Gatekeepers que podem ter sido instalados pelo fluxo oficial do Cloudflare OS
@@ -150,6 +151,34 @@ function configDoScheduler(base, config) {
   return s;
 }
 
+/** Engine é uma folha descartável: AI + Supabase via JWT, sem DO/D1/Loader. */
+export function configDoEngine(base, config) {
+  const e = structuredClone(base);
+  e.account_id = config.accountId;
+  e.name = config.workers.engine.name;
+  e.workers_dev = config.workers.engine.route?.workersDev === true;
+  delete e.routes;
+  e.ai = { binding: "AI" };
+  e.vars = {
+    SUPABASE_URL: config.agenticRuntime.supabaseUrl,
+    WORKERS_AI_MODEL: config.agenticRuntime.workersAiModel,
+  };
+  e.secrets = { required: [config.agenticRuntime.supabasePublishableKeySecret] };
+  delete e.durable_objects;
+  delete e.d1_databases;
+  delete e.worker_loaders;
+  e.observability = {
+    enabled: config.observability.enabled,
+    head_sampling_rate: config.observability.headSamplingRate,
+    logs: { invocation_logs: config.observability.logs.invocationLogs },
+    traces: {
+      enabled: config.observability.traces.enabled,
+      head_sampling_rate: config.observability.traces.headSamplingRate,
+    },
+  };
+  return e;
+}
+
 async function gerarTudo(config) {
   // O validateConfig do starter exige workers.workshop.route. Na nossa topologia
   // quem tem rota é o router, então sintetizamos uma para satisfazer a validação
@@ -175,8 +204,10 @@ async function gerarTudo(config) {
     context: await lerJsonc(join(root, `${OS}/gatekeeper-context/wrangler.jsonc`)),
     customGatekeeper: await lerJsonc(join(root, "packages/custom-gatekeeper/wrangler.jsonc")),
     errorReporter: await lerJsonc(join(root, "packages/error-reporter/wrangler.jsonc")),
+    engine: await lerJsonc(join(root, "packages/powerfarm-engine/wrangler.jsonc")),
   };
   const gerado = generateConfigs(paraBase, bases);
+  gerado.engine = configDoEngine(bases.engine, config);
 
   // --- backend deixa de ser público e de servir assets: quem faz isso é o router
   // Fora do modo Access: sem estas vars o backend serve o próprio login.
@@ -293,6 +324,7 @@ function construir(config) {
   rodar(["--dir", "cloudflare-os", "--filter", "@gadgets/gatekeeper-scheduler", "build"]);
   rodar(["--dir", "packages/custom-gatekeeper", "run", "build"]);
   if (config.errorReporting.enabled) rodar(["--dir", "packages/error-reporter", "run", "build"]);
+  rodar(["--filter", "@powerfarm/engine", "build"]);
   // SEM VITE_CF_ACCESS_MODE: com a flag, o frontend esconde login e cadastro
   // por assumir que o Access já autenticou. Fora dela, ele serve a própria tela.
   rodar(["--dir", "cloudflare-os", "--filter", "@gadgets/workshop-frontend", "build"]);
@@ -334,8 +366,8 @@ async function main() {
     throw new Error("submodule cloudflare-os não inicializado. Rode: git submodule update --init");
   }
   const config = parse(await readFile(join(root, "deployment.jsonc"), "utf8"), [], { allowTrailingComma: true });
-  if (!config.workers?.router?.name || !config.workers?.scheduler?.name) {
-    throw new Error("deployment.jsonc precisa de workers.router e workers.scheduler nesta topologia");
+  if (!config.workers?.router?.name || !config.workers?.scheduler?.name || !config.workers?.engine?.name) {
+    throw new Error("deployment.jsonc precisa de workers.router, workers.scheduler e workers.engine nesta topologia");
   }
   const duasFases = config.deploy?.twoPhase === true;
 
@@ -379,5 +411,7 @@ async function main() {
   }
 }
 
-try { await main(); }
-catch (e) { console.error(`\nDeploy falhou. ${e.message}`); process.exitCode = 1; }
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try { await main(); }
+  catch (e) { console.error(`\nDeploy falhou. ${e.message}`); process.exitCode = 1; }
+}

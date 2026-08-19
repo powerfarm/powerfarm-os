@@ -29,6 +29,7 @@ export function generatedConfigPaths(config) {
     customGatekeeper: `packages/custom-gatekeeper/${G}`,
     identity: `packages/gatekeeper-identity/${G}`,
     errorReporter: `packages/error-reporter/${G}`,
+    engine: `packages/powerfarm-engine/${G}`,
   };
   const saida = {};
   for (const [chave, rel] of Object.entries(mapa)) {

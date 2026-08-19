@@ -15,7 +15,7 @@ exigir(config.auth?.mode === "password",
   "auth.mode deve ser 'password' enquanto deploy-powerfarm.mjs implementar esse modo");
 
 const requiredWorkers = [
-  "workshop", "router", "context", "scheduler", "customGatekeeper", "errorReporter",
+  "workshop", "router", "context", "scheduler", "customGatekeeper", "errorReporter", "engine",
 ];
 for (const key of requiredWorkers) {
   exigir(typeof config.workers?.[key]?.name === "string" && config.workers[key].name.length > 0,
@@ -32,6 +32,15 @@ exigir(route && Boolean(route.customDomain) !== Boolean(route.workersDev),
   "router deve ter exatamente uma rota: customDomain ou workersDev");
 exigir(config.workers?.workshop?.route === undefined,
   "workshop backend deve permanecer interno; a rota pública pertence ao router");
+exigir(config.workers?.engine?.route?.workersDev === true,
+  "pf.engine v0.1 deve ter endpoint workers.dev explícito e separado do router");
+exigir(config.agenticRuntime?.supabaseUrl === "https://wmsrqefgdgcijupeogfa.supabase.co",
+  "pf.engine deve apontar ao Supabase canônico declarado no repo");
+exigir(config.agenticRuntime?.supabasePublishableKeySecret === "SUPABASE_PUBLISHABLE_KEY",
+  "pf.engine deve declarar a chave publicável como secret, nunca como var");
+exigir(typeof config.agenticRuntime?.workersAiModel === "string"
+  && config.agenticRuntime.workersAiModel.startsWith("@cf/"),
+  "pf.engine deve declarar um modelo Workers AI explícito");
 
 // Scheduler é parte do contrato de espera/retomada. Não pode sumir por limpeza.
 exigir(Boolean(config.workers?.scheduler?.name),

@@ -16,7 +16,18 @@
     "scheduler":        { "name": "powerfarm-gk-scheduler" },
     "customGatekeeper": { "name": "powerfarm-gk-custom" },
     "identity":         { "name": "powerfarm-gk-identity" },
+    "engine":           { "name": "powerfarm-engine",
+                          "route": { "workersDev": true } },
     "errorReporter":    { "name": "powerfarm-error-reporter" }
+  },
+
+  // pf.engine v0.1 is a separate disposable placement, deliberately not mixed
+  // into the current public Router. The publishable key is supplied as the
+  // named Worker secret; caller JWTs only arrive per request.
+  "agenticRuntime": {
+    "supabaseUrl": "https://wmsrqefgdgcijupeogfa.supabase.co",
+    "supabasePublishableKeySecret": "SUPABASE_PUBLISHABLE_KEY",
+    "workersAiModel": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
   },
 
   // Ligar só depois do primeiro deploy verde. É o caminho de código menos rodado daqui.
