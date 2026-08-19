@@ -8,6 +8,12 @@
   Deploy a pinned Cloudflare OS release with branding, sign-in, integrations, routes, and upgrades under your control.
 </p>
 
+Powerfarm v0.1's disposable ADK-JS vertical slice lives in
+[`packages/powerfarm-engine`](packages/powerfarm-engine/README.md). Its canonical
+example is [`examples/gadgets/hello-agentic/gadget.yaml`](examples/gadgets/hello-agentic/gadget.yaml),
+with the durability decision recorded in
+[`docs/adr/0001-stateless-compute-durable-truth.md`](docs/adr/0001-stateless-compute-durable-truth.md).
+
 <p align="center">
   <a href="https://developers.cloudflare.com/workers/"><img alt="Cloudflare Workers" src="https://img.shields.io/badge/Cloudflare-Workers-F6821F?logo=cloudflare&logoColor=white"></a>
   <a href="https://nodejs.org/"><img alt="Node.js 24" src="https://img.shields.io/badge/Node.js-24-5FA04E?logo=nodedotjs&logoColor=white"></a>
