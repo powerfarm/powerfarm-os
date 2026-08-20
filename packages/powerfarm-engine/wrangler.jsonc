@@ -7,7 +7,7 @@
     "nodejs_compat",
     "nodejs_compat_do_not_populate_process_env"
   ],
-  "workers_dev": true,
+  "workers_dev": false,
   "define": {
     "import.meta.url": "\"file:///worker/index.js\""
   },

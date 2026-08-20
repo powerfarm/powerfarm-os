@@ -15,12 +15,14 @@ export interface InvokeRequest {
   userId: string;
   input: unknown;
   idempotencyKey: string;
+  runGrantRef?: string;
 }
 
 export interface ResumeRequest {
   userId: string;
   runId: string;
   input: unknown;
+  idempotencyKey?: string;
 }
 
 export interface PendingInput {
@@ -40,6 +42,10 @@ export interface InvocationResult {
     gadgetId: string;
     gadgetVersion: string;
     definitionHash: string;
+    gadgetRevision?: number;
+    gadgetRevisionHash?: string;
+    capabilityRef?: string;
+    authorityVersion?: number;
     runtime: "adk-js@1.6.0";
   };
 }
@@ -200,6 +206,7 @@ export class PowerfarmInvocationRuntime {
       definitionHash: gadget.definitionHash,
       sessionId,
       idempotencyKey: request.idempotencyKey,
+      runGrantRef: request.runGrantRef,
       intent: inputText(request.input),
     });
     const existing = this.existingResult(gadget, run);
