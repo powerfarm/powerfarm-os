@@ -18,6 +18,31 @@ describe("Supabase Registry delegated client", () => {
     );
   });
 
+  it("preserves the Workers global fetch receiver on the default runtime path", async () => {
+    const originalFetch = globalThis.fetch;
+    const receiverSensitiveFetch = vi.fn(function(
+      this: unknown,
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Illegal invocation: function called with incorrect `this` reference");
+      }
+      return Promise.resolve(Response.json({ ok: true }));
+    });
+
+    globalThis.fetch = receiverSensitiveFetch as typeof fetch;
+    try {
+      const client = new SupabaseRegistryClient(
+        "https://project.supabase.co", "publishable", "user-jwt",
+      );
+      await expect(client.rpc("powerfarm_identity_context", {})).resolves.toEqual({ ok: true });
+      expect(receiverSensitiveFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("does not reflect provider error bodies or admit arbitrary RPC names", async () => {
     const client = new SupabaseRegistryClient(
       "https://project.supabase.co", "publishable", "user-jwt",
