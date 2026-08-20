@@ -12,15 +12,24 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const i = process.argv.indexOf("--from");
 const verificar = process.argv.includes("--verify");
+const onlyIdx = process.argv.indexOf("--only-workers");
+const onlyWorkers = new Set(
+  (onlyIdx > -1 ? process.argv[onlyIdx + 1] ?? "" : "")
+    .split(",").map((value) => value.trim()).filter(Boolean),
+);
 const registro = JSON.parse(await readFile(`${root}/${i > -1 ? process.argv[i + 1] : "versoes-antes.json"}`, "utf8"));
 
 // Ordem inversa da publicação: a origem pública volta primeiro, para parar de
 // servir código novo contra workers que ainda vão voltar atrás.
-const ordem = Object.entries(registro.workers).reverse();
+const ordem = Object.entries(registro.workers).reverse().filter(([worker]) =>
+  onlyWorkers.size === 0 || onlyWorkers.has(worker));
 
 const recusados = [];
 for (const [worker, ponto] of ordem) {
-  if (!ponto?.versionId) { console.log(`- ${worker}: sem ponto de volta (worker novo), deixando como está`); continue; }
+  if (!ponto?.versionId) {
+    console.log(`- ${worker}: sem ponto de volta (worker novo), deixando como está`);
+    continue;
+  }
   console.log(`- ${worker}: revertendo para ${ponto.versionId.slice(0, 8)}`);
   const r = spawnSync("pnpm", [
     "exec", "wrangler", "rollback", ponto.versionId,
