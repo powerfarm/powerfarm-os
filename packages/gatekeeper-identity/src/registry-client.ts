@@ -2,6 +2,12 @@ import type { RegistryAuthorityClient } from "./powerfarm-authority.js";
 
 type FetchFunction = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+// Cloudflare's runtime fetch is brand-sensitive. Keeping the bare runtime function
+// as an object field and invoking it as `this.fetcher(...)` changes its receiver
+// and can fail with `Illegal invocation` only after RPC validation succeeds.
+// Wrap it so the actual runtime fetch is always called as a normal global function.
+const runtimeFetch: FetchFunction = (input, init) => fetch(input, init);
+
 export class SupabaseRegistryClient implements RegistryAuthorityClient {
   readonly #baseUrl: string;
 
@@ -9,7 +15,7 @@ export class SupabaseRegistryClient implements RegistryAuthorityClient {
     baseUrl: string,
     private readonly publishableKey: string,
     private readonly callerBearer: string,
-    private readonly fetcher: FetchFunction = fetch,
+    private readonly fetcher: FetchFunction = runtimeFetch,
   ) {
     if (!baseUrl.startsWith("https://") || publishableKey === "" || callerBearer === "") {
       throw new Error("Registry delegated authentication is not configured");
