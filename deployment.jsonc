@@ -17,7 +17,7 @@
     "customGatekeeper": { "name": "powerfarm-gk-custom" },
     "identity":         { "name": "powerfarm-gk-identity" },
     "engine":           { "name": "powerfarm-engine",
-                          "route": { "workersDev": true } },
+                          "route": { "workersDev": false } },
     "errorReporter":    { "name": "powerfarm-error-reporter" }
   },
 

@@ -6,7 +6,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
-    "types": ["node"],
+    "types": ["node", "./worker-configuration.d.ts"],
     "noEmit": true,
     "strict": true
   },

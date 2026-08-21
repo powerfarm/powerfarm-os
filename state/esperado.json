@@ -217,7 +217,7 @@
         "allow_irrevocable_stub_storage",
         "nodejs_compat"
       ],
-      "migration_tag": "v0",
+      "migration_tag": "v1",
       "bindings": [
         {
           "name": "BASE_URL",
@@ -232,10 +232,22 @@
           "text": "79be4b93-d42e-4fd1-b79b-162f62f0b02f"
         },
         {
+          "name": "ENGINE",
+          "type": "service",
+          "target": "powerfarm-engine",
+          "entrypoint": "WorkspaceRuntime"
+        },
+        {
           "name": "ISSUER",
           "type": "plain_text",
           "target": null,
           "text": "https://wmsrqefgdgcijupeogfa.supabase.co/auth/v1"
+        },
+        {
+          "name": "SUPABASE_URL",
+          "type": "plain_text",
+          "target": null,
+          "text": "https://wmsrqefgdgcijupeogfa.supabase.co"
         }
       ]
     },

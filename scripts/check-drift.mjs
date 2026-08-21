@@ -5,6 +5,10 @@
 // Uso antes de deploy: --esperado aponta para o esperado do ÚLTIMO commit
 // realmente implantado. Isso detecta mudança manual na produção sem impedir
 // que o novo commit declare mudanças legítimas ainda não implantadas.
+//
+// Um deploy seletivo pode usar --ignore-workers para excluir somente os Workers
+// que serão reconciliados neste próprio run. Todo o resto continua protegido
+// pelo baseline anterior.
 import { writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +19,11 @@ const relIdx = process.argv.indexOf("--relatorio");
 const relatorio = relIdx > -1 ? process.argv[relIdx + 1] : null;
 const espIdx = process.argv.indexOf("--esperado");
 const espArg = espIdx > -1 ? process.argv[espIdx + 1] : "state/esperado.json";
+const ignoreIdx = process.argv.indexOf("--ignore-workers");
+const ignoredWorkers = new Set(
+  (ignoreIdx > -1 ? process.argv[ignoreIdx + 1] ?? "" : "")
+    .split(",").map((value) => value.trim()).filter(Boolean),
+);
 if (!espArg) {
   console.error("✗ REGRA 1 — --esperado exige um caminho.");
   process.exit(1);
@@ -66,6 +75,11 @@ let divergiu = false;
 // NOVO aqui: se ele adicionar/remover Workers, isso é justamente a mudança que
 // ainda será aplicada depois que o baseline anterior for validado.
 for (const worker of Object.keys(esperado.workers)) {
+  if (ignoredWorkers.has(worker)) {
+    console.log(`↷ ${worker}: drift pré-deploy ignorado porque este Worker será reconciliado agora`);
+    continue;
+  }
+
   const vivo = normalizeLive(await cfFetch(`/workers/scripts/${worker}/settings`));
   const alvo = esperado.workers[worker];
 
@@ -114,4 +128,5 @@ if (divergiu) {
   console.error("  Corrija via PR/deploy; não reaprenda o estado a partir da produção.\n");
   process.exit(1);
 }
-console.log(`✓ REGRA 1 — produção bate com a referência (${esperadoPath}).`);
+const ignored = ignoredWorkers.size ? `; reconciliando agora: ${[...ignoredWorkers].join(", ")}` : "";
+console.log(`✓ REGRA 1 — produção bate com a referência (${esperadoPath}${ignored}).`);

@@ -5,12 +5,12 @@
     "lib": ["ESNext"],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "types": ["./worker-configuration.d.ts"],
+    "types": ["@cloudflare/workers-types", "node"],
     "outDir": "./dist",
     "declaration": true,
     "sourceMap": true,
     "noEmit": false
   },
   "include": ["src"],
-  "exclude": ["dist", "node_modules", ".wrangler"]
+  "exclude": ["dist", "node_modules", ".wrangler", "src/**/*.test.ts"]
 }

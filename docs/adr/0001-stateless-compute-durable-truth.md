@@ -17,6 +17,12 @@ validates and compiles Gadget YAML; the runtime does not own a global set of
 Powerfarm agents. ADK-JS is the v0.1 implementation substrate behind the
 Powerfarm runtime boundary.
 
+Registry owns one Gadget lineage: a concurrency-controlled mutable draft and
+immutable published revisions. IdentityContext says who is acting; Registry
+resolves the installed revision; Gatekeeper issues authority for that exact
+snapshot; the Engine executes only the resulting strict ExecutionEnvelope.
+The Engine neither resolves `published` nor accepts caller-authored YAML.
+
 Capabilities—not secrets—cross into the agent runtime. Model, Gatekeeper, and
 execution authority is explicitly injected. Gadget YAML, ADK state, Dynamic
 Worker source, run rows, and logs must not contain provider credentials.
@@ -38,3 +44,8 @@ respond, and disappear; MCP does not imply process residency.
   Object or D1 database is introduced.
 - Placement is currently `cloudflare-adk-js`, but Gadget semantics contain no
   Cloudflare binding details.
+- `WorkspaceRuntime` is a private named Worker RPC entrypoint bound only to the
+  Powerfarm Identity/Capability Gatekeeper. Public HTTP invocation is absent.
+- A RunGrant pins principal, workspace, capability, Gadget revision and hashes,
+  allowed capabilities, authority version, expiry, and idempotency key. It
+  stores no OAuth bearer or provider credential.

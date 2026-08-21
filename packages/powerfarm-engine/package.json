@@ -8,6 +8,7 @@
     "build": "tsc --noEmit",
     "test": "vitest run",
     "test:live": "POWERFARM_LIVE_SUPABASE=1 vitest run src/runtime/live-supabase.live.test.ts",
+    "test:full-live": "POWERFARM_FULL_LIVE=1 vitest run src/full-platform.live.test.ts",
     "types": "wrangler types"
   },
   "dependencies": {

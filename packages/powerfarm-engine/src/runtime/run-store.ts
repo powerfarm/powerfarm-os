@@ -10,6 +10,7 @@ export interface RunRecord {
   definitionHash: string;
   sessionId: string;
   idempotencyKey: string;
+  runGrantId?: string;
   status: RunStatus;
   result: unknown;
   error: unknown;
@@ -23,6 +24,7 @@ export interface CreateRunInput {
   sessionId: string;
   idempotencyKey: string;
   intent: string;
+  runGrantRef?: string;
 }
 
 const runStatuses = new Set<RunStatus>([
@@ -48,6 +50,7 @@ function asRun(value: unknown): RunRecord {
     definitionHash: stringField(value, "definition_hash"),
     sessionId: stringField(value, "engine_ref"),
     idempotencyKey: stringField(value, "idempotency_key"),
+    runGrantId: typeof value.run_grant_id === "string" ? value.run_grant_id : undefined,
     status: status as RunStatus,
     result: value.result,
     error: value.error,
@@ -60,6 +63,13 @@ export class RunStore {
 
   async create(input: CreateRunInput): Promise<RunRecord> {
     if (input.idempotencyKey.trim() === "") throw new Error("An idempotency key is required");
+    if (input.runGrantRef !== undefined) {
+      return asRun(await this.database.rpc("powerfarm_run_create_envelope", {
+        p_run_grant_ref: input.runGrantRef,
+        p_session_id: input.sessionId,
+        p_intent: input.intent,
+      }));
+    }
     return asRun(await this.database.rpc("powerfarm_run_create", {
       p_gadget_id: input.gadgetId,
       p_gadget_version: input.gadgetVersion,

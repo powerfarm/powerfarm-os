@@ -1,8 +1,12 @@
-import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
+import { DurableObject, RpcStub, RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
 import { validateRpc } from "capnweb-validate";
 import type {
   AccountDescription,
+  ActionDescription,
+  ActionKind,
+  ApprovalQueue,
   ResourceConfiguratorFrame,
+  ResourceDescription,
   Gatekeeper,
   GatekeeperConnectCallback,
   GatekeeperConnectOptions,
@@ -13,9 +17,14 @@ import type {
   VendorDescription,
 } from "@gadgets/workshop-shared/gatekeeper";
 import TYPES_CODE from "./types-code.js";
+import { refreshOAuthTokens } from "./oauth-refresh.js";
+import { PowerfarmAuthorityBroker } from "./powerfarm-authority.js";
+import { SupabaseRegistryClient } from "./registry-client.js";
+import { isPowerfarmWorkspaceUrl, POWERFARM_WORKSPACE_RESOURCE } from "./resource.js";
 
-// Este gatekeeper existe para UMA coisa: provar quem e a pessoa, contra o
-// emissor OAuth 2.1 da PowerFarm no Supabase. Nao da acesso a recurso nenhum.
+// Este Worker preserva duas fronteiras: o emissor OAuth prova quem e a pessoa;
+// o Gatekeeper oferece somente as capacidades Powerfarm tipadas dessa pessoa.
+// O token delegado nunca atravessa para o Gadget ou para a Workspace LLM.
 //
 // Porque o email e o que importa aqui: o Workshop indexa contas por email, e o
 // proprio upstream avisa que um email nao verificado permitiria tomada de conta.
@@ -76,8 +85,39 @@ type Estado = {
   authOnly?: boolean;
   accessToken?: string;
   refreshToken?: string;
+  expiresAt?: string;
   email?: string;
 };
+
+export interface PowerfarmRunResult {
+  runId: string;
+  sessionId: string;
+  status: "waiting_input" | "completed";
+  pendingInput?: unknown;
+  result?: unknown;
+  provenance: unknown;
+}
+
+export interface PowerfarmSession {
+  getHelloDraft(): Promise<unknown>;
+  applyHelloPatch(baseRevision: number, patch: Record<string, unknown>, clientOperationId: string): Promise<void>;
+  publishHello(baseRevision: number): Promise<void>;
+  helloRun(input: unknown, idempotencyKey: string): Promise<PowerfarmRunResult>;
+  resumeHello(runId: string, input: unknown, idempotencyKey: string): Promise<PowerfarmRunResult>;
+}
+
+function runResult(value: unknown): PowerfarmRunResult {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Powerfarm runtime returned an invalid result");
+  }
+  const result = value as Record<string, unknown>;
+  if (typeof result.runId !== "string" || typeof result.sessionId !== "string"
+    || (result.status !== "waiting_input" && result.status !== "completed")
+    || result.provenance === undefined) {
+    throw new Error("Powerfarm runtime returned an invalid result");
+  }
+  return result as unknown as PowerfarmRunResult;
+}
 
 export class UserAccount extends DurableObject<Cloudflare.Env> {
   #ler(): Estado {
@@ -132,14 +172,18 @@ export class UserAccount extends DurableObject<Cloudflare.Env> {
       method: "POST", headers: cabecalhos, body: corpo,
     });
     if (!res.ok) return false;
-    const tok = await res.json<{ access_token?: string; refresh_token?: string }>();
+    const tok = await res.json<{
+      access_token?: string; refresh_token?: string; expires_in?: number;
+    }>();
     if (!tok.access_token) return false;
 
     const email = await this.#emailVerificado(tok.access_token);
 
     await this.ctx.storage.put("estado", {
       ...e, oauthNonce: undefined, pkceVerifier: undefined,
-      accessToken: tok.access_token, refreshToken: tok.refresh_token, email: email ?? undefined,
+      accessToken: tok.access_token, refreshToken: tok.refresh_token,
+      expiresAt: new Date(Date.now() + (tok.expires_in ?? 3600) * 1_000).toISOString(),
+      email: email ?? undefined,
     } satisfies Estado);
 
     const callback = await this.ctx.storage.get<Fetcher<GatekeeperConnectCallback>>("callback");
@@ -165,6 +209,87 @@ export class UserAccount extends DurableObject<Cloudflare.Env> {
 
   async getEmail(): Promise<string | null> {
     return (await this.ctx.storage.get<Estado>("estado"))?.email ?? null;
+  }
+
+  async #freshAccessToken(): Promise<string> {
+    const state = await this.ctx.storage.get<Estado>("estado");
+    if (!state?.accessToken) throw new Error("Powerfarm reauthentication required");
+    if (state.expiresAt !== undefined && Date.parse(state.expiresAt) > Date.now() + 60_000) {
+      return state.accessToken;
+    }
+    if (!state.refreshToken || !this.env.CLIENT_ID) {
+      throw new Error("Powerfarm reauthentication required");
+    }
+    try {
+      const refreshed = await refreshOAuthTokens({
+        issuer: this.env.ISSUER,
+        clientId: this.env.CLIENT_ID,
+        clientSecret: this.env.CLIENT_SECRET,
+        refreshToken: state.refreshToken,
+      });
+      await this.ctx.storage.put("estado", {
+        ...state,
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken,
+        expiresAt: refreshed.expiresAt,
+      } satisfies Estado);
+      return refreshed.accessToken;
+    } catch {
+      const callback = await this.ctx.storage.get<Fetcher<GatekeeperConnectCallback>>("callback");
+      await callback?.credentialsExpired();
+      throw new Error("Powerfarm reauthentication required");
+    }
+  }
+
+  async helloRun(input: unknown, idempotencyKey: string): Promise<PowerfarmRunResult> {
+    const bearer = await this.#freshAccessToken();
+    const registry = new SupabaseRegistryClient(
+      this.env.SUPABASE_URL, this.env.SUPABASE_PUBLISHABLE_KEY, bearer,
+    );
+    return runResult(await new PowerfarmAuthorityBroker(registry, this.env.ENGINE)
+      .helloRun(input, idempotencyKey, bearer));
+  }
+
+  async getHelloDraft(): Promise<unknown> {
+    const bearer = await this.#freshAccessToken();
+    const registry = new SupabaseRegistryClient(
+      this.env.SUPABASE_URL, this.env.SUPABASE_PUBLISHABLE_KEY, bearer,
+    );
+    return new PowerfarmAuthorityBroker(registry, this.env.ENGINE).getHelloDraft();
+  }
+
+  async applyHelloPatch(
+    baseRevision: number,
+    patch: Record<string, unknown>,
+    clientOperationId: string,
+  ): Promise<unknown> {
+    const bearer = await this.#freshAccessToken();
+    const registry = new SupabaseRegistryClient(
+      this.env.SUPABASE_URL, this.env.SUPABASE_PUBLISHABLE_KEY, bearer,
+    );
+    return new PowerfarmAuthorityBroker(registry, this.env.ENGINE)
+      .applyHelloPatch(baseRevision, patch, clientOperationId);
+  }
+
+  async publishHello(baseRevision: number): Promise<unknown> {
+    const bearer = await this.#freshAccessToken();
+    const registry = new SupabaseRegistryClient(
+      this.env.SUPABASE_URL, this.env.SUPABASE_PUBLISHABLE_KEY, bearer,
+    );
+    return new PowerfarmAuthorityBroker(registry, this.env.ENGINE).publishHello(baseRevision);
+  }
+
+  async resumeHello(
+    runId: string,
+    input: unknown,
+    idempotencyKey: string,
+  ): Promise<PowerfarmRunResult> {
+    const bearer = await this.#freshAccessToken();
+    const registry = new SupabaseRegistryClient(
+      this.env.SUPABASE_URL, this.env.SUPABASE_PUBLISHABLE_KEY, bearer,
+    );
+    return runResult(await new PowerfarmAuthorityBroker(registry, this.env.ENGINE)
+      .resumeHello(runId, input, idempotencyKey, bearer));
   }
 
   async revoke(): Promise<void> {
@@ -197,7 +322,9 @@ export class GatekeeperVendor extends WorkerEntrypoint<Cloudflare.Env>
     return this.ctx.exports.GatekeeperUserImpl({ props: { userObjectId: id.toString() } });
   }
 
-  async getSupportedResources(): Promise<SupportedResource[]> { return []; }
+  async getSupportedResources(): Promise<SupportedResource[]> {
+    return [POWERFARM_WORKSPACE_RESOURCE];
+  }
   async getTypeScriptTypes(): Promise<string> { return TYPES_CODE; }
 }
 
@@ -212,7 +339,11 @@ export class GatekeeperUserImpl
 
   async describe(): Promise<AccountDescription> {
     const email = await this.#conta().getEmail();
-    return { displayName: email ?? "PowerFarm Identity", avatar: ICON };
+    return {
+      displayName: email ?? "PowerFarm Identity",
+      avatar: ICON,
+      singleton: { tsType: "PowerfarmSession" },
+    };
   }
 
   // Contrato: nunca lanca. Qualquer falha e "nao ha email".
@@ -222,6 +353,12 @@ export class GatekeeperUserImpl
 
   async getVerifier(): Promise<Fetcher<GatekeeperUserVerifier>> {
     return this.ctx.exports.IdentityVerifier({
+      props: { userObjectId: this.ctx.props.userObjectId },
+    });
+  }
+
+  async getSingletonGatekeeperClass(): Promise<DurableObjectClass<Gatekeeper<PowerfarmSession>>> {
+    return this.ctx.exports.PowerfarmGatekeeper({
       props: { userObjectId: this.ctx.props.userObjectId },
     });
   }
@@ -236,12 +373,22 @@ export class GatekeeperUserImpl
 
   async revoke(): Promise<void> { await this.#conta().revoke(); }
 
-  async getSupportedResources(): Promise<SupportedResource[]> { return []; }
+  async getSupportedResources(): Promise<SupportedResource[]> {
+    return [POWERFARM_WORKSPACE_RESOURCE];
+  }
 
   async getGatekeeperClassFor(url: string): Promise<{
     class: DurableObjectClass<Gatekeeper<any>>; resource: SupportedResource;
   }> {
-    throw new Error(`PowerFarm Identity nao da acesso a recursos (${url}).`);
+    if (!isPowerfarmWorkspaceUrl(url)) {
+      throw new Error(`Unsupported Powerfarm resource (${url}).`);
+    }
+    return {
+      class: this.ctx.exports.PowerfarmGatekeeper({
+        props: { userObjectId: this.ctx.props.userObjectId },
+      }),
+      resource: POWERFARM_WORKSPACE_RESOURCE,
+    };
   }
 
   // Sem recursos endereçaveis, nao ha formulario de configuracao para servir.
@@ -249,7 +396,10 @@ export class GatekeeperUserImpl
     throw new Error("PowerFarm Identity nao tem recursos endereçaveis por URL.");
   }
 
-  async ensureResources(_resourceUrlPatterns: string[]): Promise<{ url?: string }> {
+  async ensureResources(resourceUrlPatterns: string[]): Promise<{ url?: string }> {
+    if (resourceUrlPatterns.some((pattern) => pattern !== POWERFARM_WORKSPACE_RESOURCE.urlPattern)) {
+      throw new Error("Unsupported Powerfarm resource grant");
+    }
     return {};
   }
 }
@@ -258,3 +408,153 @@ export class GatekeeperUserImpl
 export class IdentityVerifier
     extends WorkerEntrypoint<Cloudflare.Env, { userObjectId: string }>
     implements GatekeeperUserVerifier {}
+
+@validateRpc()
+class PowerfarmSessionImpl extends RpcTarget implements PowerfarmSession {
+  constructor(
+    private readonly account: DurableObjectStub<UserAccount>,
+    private readonly approvalQueue: RpcStub<ApprovalQueue>,
+    private readonly stageAction: (
+      action: PendingPowerfarmAction,
+      description: ActionDescription,
+      approvalQueue: RpcStub<ApprovalQueue>,
+    ) => Promise<void>,
+  ) { super(); }
+
+  async getHelloDraft(): Promise<unknown> {
+    await this.approvalQueue.authorizeObservation({
+      title: "Read hello-agentic draft",
+      description: "Read the current mutable hello-agentic draft from the Powerfarm Registry.",
+    });
+    return this.account.getHelloDraft();
+  }
+
+  async applyHelloPatch(
+    baseRevision: number,
+    patch: Record<string, unknown>,
+    clientOperationId: string,
+  ): Promise<void> {
+    await this.stageAction(
+      { kind: "apply_patch", baseRevision, patch, clientOperationId },
+      {
+        title: "Edit hello-agentic draft",
+        description: `Apply an optimistic edit to hello-agentic draft revision ${baseRevision}.`,
+        implementsRevert: false,
+        awaitDecision: true,
+        actionKind: { tag: "powerfarm.gadget.edit", label: "Edit Powerfarm Gadget draft" },
+      },
+      this.approvalQueue,
+    );
+  }
+
+  async publishHello(baseRevision: number): Promise<void> {
+    await this.stageAction(
+      { kind: "publish", baseRevision },
+      {
+        title: "Publish hello-agentic",
+        description: `Validate and publish hello-agentic draft revision ${baseRevision} as an immutable revision.`,
+        implementsRevert: false,
+        awaitDecision: true,
+        actionKind: { tag: "powerfarm.gadget.publish", label: "Publish Powerfarm Gadget" },
+      },
+      this.approvalQueue,
+    );
+  }
+
+  async helloRun(input: unknown, idempotencyKey: string): Promise<PowerfarmRunResult> {
+    await this.approvalQueue.authorizeObservation({
+      title: "Run hello.run",
+      description: "Use the installed hello.run capability under the current Powerfarm authority.",
+    });
+    return this.account.helloRun(input, idempotencyKey);
+  }
+
+  async resumeHello(
+    runId: string,
+    input: unknown,
+    idempotencyKey: string,
+  ): Promise<PowerfarmRunResult> {
+    await this.approvalQueue.authorizeObservation({
+      title: "Resume hello.run",
+      description: "Resume the named waiting run under its existing Powerfarm RunGrant.",
+    });
+    return this.account.resumeHello(runId, input, idempotencyKey);
+  }
+
+  [Symbol.dispose](): void { this.approvalQueue[Symbol.dispose](); }
+}
+
+type PendingPowerfarmAction =
+  | { kind: "apply_patch"; baseRevision: number; patch: Record<string, unknown>; clientOperationId: string }
+  | { kind: "publish"; baseRevision: number };
+
+@validateRpc()
+export class PowerfarmGatekeeper
+    extends DurableObject<Cloudflare.Env, { userObjectId: string }>
+    implements Gatekeeper<PowerfarmSession> {
+  #account(): DurableObjectStub<UserAccount> {
+    return this.ctx.exports.UserAccount.get(
+      this.ctx.exports.UserAccount.idFromString(this.ctx.props.userObjectId),
+    );
+  }
+
+  async describe(): Promise<ResourceDescription> {
+    return {
+      url: "powerfarm://workspace",
+      title: "Powerfarm Workspace",
+      snippet: "Installed, typed Powerfarm capabilities under the signed-in identity.",
+      suggestedBindingName: "POWERFARM",
+      tsType: "PowerfarmSession",
+    };
+  }
+
+  async getTypeScriptTypes(): Promise<string> { return TYPES_CODE; }
+  async getAutoApprovableActions(): Promise<ActionKind[]> { return []; }
+
+  async startSession(approvalQueue: RpcStub<ApprovalQueue>): Promise<PowerfarmSession> {
+    return new PowerfarmSessionImpl(
+      this.#account(),
+      approvalQueue.dup(),
+      (action, description, queue) => this.#stageAction(action, description, queue),
+    );
+  }
+
+  async #stageAction(
+    action: PendingPowerfarmAction,
+    description: ActionDescription,
+    approvalQueue: RpcStub<ApprovalQueue>,
+  ): Promise<void> {
+    const next = this.ctx.storage.kv.get<number>("powerfarm:next-action") ?? 1;
+    this.ctx.storage.kv.put("powerfarm:next-action", next + 1);
+    this.ctx.storage.kv.put(`powerfarm:action:${next}`, action);
+    try {
+      await approvalQueue.submitAction(next, description);
+    } catch (error) {
+      this.ctx.storage.kv.delete(`powerfarm:action:${next}`);
+      throw error;
+    }
+  }
+
+  async addObserver(_id: string, _user: Fetcher<GatekeeperUserVerifier>): Promise<void> {}
+  async removeObserver(_id: string): Promise<void> {}
+  async applyAction(action: number): Promise<void> {
+    const key = `powerfarm:action:${action}`;
+    const pending = this.ctx.storage.kv.get<PendingPowerfarmAction>(key);
+    if (pending === undefined) throw new Error(`Powerfarm runtime has no queued action ${action}.`);
+    const account = this.#account();
+    if (pending.kind === "apply_patch") {
+      await account.applyHelloPatch(
+        pending.baseRevision, pending.patch, pending.clientOperationId,
+      );
+    } else {
+      await account.publishHello(pending.baseRevision);
+    }
+    this.ctx.storage.kv.delete(key);
+  }
+  async rejectAction(action: number): Promise<void> {
+    this.ctx.storage.kv.delete(`powerfarm:action:${action}`);
+  }
+  async revertAction(action: number): Promise<void> {
+    throw new Error(`Powerfarm runtime action ${action} cannot be reverted here.`);
+  }
+}

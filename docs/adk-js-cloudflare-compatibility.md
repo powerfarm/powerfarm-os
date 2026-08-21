@@ -1,6 +1,6 @@
 # ADK-JS on the Powerfarm Cloudflare runtime
 
-Verified 2026-08-19 against `@google/adk` 1.6.0, `@google/genai` 2.9.0,
+Verified again 2026-08-20 against `@google/adk` 1.6.0, `@google/genai` 2.9.0,
 Wrangler 4.118.0, workerd 1.20260730.1, compatibility date 2026-02-02,
 `nodejs_compat`, and `nodejs_compat_do_not_populate_process_env`.
 
@@ -27,16 +27,18 @@ pinned and any upgrade must rerun this report.
 - `LlmAgent`, `SequentialAgent`, `Runner`, `BaseSessionService`, `BaseLlm`, and
   `BaseCodeExecutor` construct and execute in tests.
 - A local Wrangler/workerd process served `/healthz` successfully.
-- The deployed Engine serves `/healthz` at
-  `https://powerfarm-engine.dan-1f4.workers.dev` (version
-  `c2d2aabe-b9d8-4134-9b82-c6612873261d`).
-- Production dry-run bundle: 3,386.61 KiB raw / 551.12 KiB gzip.
+- Production dry-run bundle: 3,389.53 KiB raw / 551.79 KiB gzip; no unusable
+  Node-only dependency reached startup.
 - The full repository deploy check bundled every existing Worker and the new
-  Engine without changing Router, Workshop, or Gatekeeper bindings.
+  Engine. Live settings confirm only Identity has
+  `ENGINE → powerfarm-engine#WorkspaceRuntime`.
 - The live Supabase test discarded the first client/runtime/Runner at
   `waiting_input`; a new set reloaded and completed the ADK invocation.
-- A public HTTP invocation used the real Workers AI binding, resumed to
-  `HELLO`, and a repeated invocation key returned the same completed run ID.
+- The full live authority proof edited and published Registry revision 2,
+  invoked its exact RunGrant, resumed through a fresh Engine service to
+  `HELLO`, and returned one completed run row when its invocation key repeated.
+- Engine version `fd3abaa1-989b-47d6-8fc3-0ebf049ea64a` is service-bound only;
+  its former workers.dev URL now returns 404.
 
 ## Code-execution placement blocker
 
@@ -52,9 +54,10 @@ does not bind it. A Gadget requesting execution is rejected during capability
 resolution before model or external work. The unblock is an upstream-safe
 callable seam for the existing method—not a second `env.LOADER` wrapper.
 
-## Remaining placement facts
+## Placement facts
 
 - Workers AI is the explicit model capability and uses the Worker binding; no
   provider token enters the Gadget.
-- The v0.1 Engine has its own workers.dev placement. It is not blended into the
-  current public Router and no production custom-domain decision is implied.
+- The v0.1 Engine is a private service-binding placement. It is not blended
+  into the public Router and no Engine binding exists on Router, Workshop,
+  Custom Gatekeeper, or Gadget execution environments.

@@ -40,8 +40,10 @@ const PACOTES = {
   router: { dir: `${OS}/router`, chave: "router" },
 };
 // A ordem do objeto É a ordem de deploy. Folhas primeiro, origem pública por último.
-const ORDEM = ["errorReporter", "context", "scheduler", "identity", "customGatekeeper", "engine",
-               "workshop", "router"];
+export const deploymentOrder = [
+  "errorReporter", "context", "scheduler", "customGatekeeper", "engine", "identity",
+  "workshop", "router",
+];
 
 // Gatekeepers que podem ter sido instalados pelo fluxo oficial do Cloudflare OS
 // depois do deploy inicial. Eles são runtime state do produto, não topologia
@@ -151,6 +153,41 @@ function configDoScheduler(base, config) {
   return s;
 }
 
+/** Identity is the sole physical broker for the private Workspace runtime. */
+export function configDaIdentity(base, config) {
+  const identity = structuredClone(base);
+  identity.account_id = config.accountId;
+  identity.name = config.workers.identity.name;
+  identity.workers_dev = false;
+  delete identity.routes;
+  identity.observability = {
+    enabled: config.observability.enabled,
+    head_sampling_rate: config.observability.headSamplingRate,
+    logs: { invocation_logs: config.observability.logs.invocationLogs },
+    traces: {
+      enabled: config.observability.traces.enabled,
+      head_sampling_rate: config.observability.traces.headSamplingRate,
+    },
+  };
+  identity.vars = {
+    ...(identity.vars ?? {}),
+    SUPABASE_URL: config.agenticRuntime.supabaseUrl,
+  };
+  identity.services = [{
+    binding: "ENGINE",
+    service: config.workers.engine.name,
+    entrypoint: "WorkspaceRuntime",
+  }];
+  identity.secrets = {
+    required: ["CLIENT_SECRET", config.agenticRuntime.supabasePublishableKeySecret],
+  };
+  identity.migrations = [...(identity.migrations ?? [])];
+  if (!identity.migrations.some((migration) => migration.tag === "v1")) {
+    identity.migrations.push({ tag: "v1", new_sqlite_classes: ["PowerfarmGatekeeper"] });
+  }
+  return identity;
+}
+
 /** Engine é uma folha descartável: AI + Supabase via JWT, sem DO/D1/Loader. */
 export function configDoEngine(base, config) {
   const e = structuredClone(base);
@@ -234,9 +271,8 @@ async function gerarTudo(config) {
   // PowerFarm Identity: o gatekeeper que faz sign-in contra o emissor OAuth 2.1
   // do Supabase. Vive num pacote proprio para o custom-gatekeeper continuar a
   // ser o exemplo em branco do starter, sem conflito quando o upstream lhe mexer.
-  gerado.identity = configDoScheduler(
+  gerado.identity = configDaIdentity(
     await lerJsonc(join(root, "packages/gatekeeper-identity/wrangler.jsonc")), config);
-  gerado.identity.name = config.workers.identity.name;
 
   // O deploy service oficial injeta estas URLs como estado da instância. Como
   // este repo assumiu o deploy por Wrangler, passa a declará-las explicitamente
@@ -375,7 +411,7 @@ async function main() {
   await preservarGatekeepersInstalados(gerado, config);
   const escritos = [];
   try {
-    for (const chave of ORDEM) {
+    for (const chave of deploymentOrder) {
       if (!gerado[chave]) continue;
       const path = join(root, PACOTES[chave].dir, GERADO);
       await writeFile(path, JSON.stringify(gerado[chave], null, 2) + "\n");
@@ -387,7 +423,7 @@ async function main() {
 
     const versoes = {};
     console.log(`\n--- publicando${duasFases ? " (sem tráfego)" : ""} ---`);
-    for (const chave of ORDEM) {
+    for (const chave of deploymentOrder) {
       if (!gerado[chave]) continue;
       console.log(`  ${chave} -> ${config.workers[chave].name}`);
       versoes[chave] = publicar(PACOTES[chave].dir, config.workers[chave].name, duasFases);
@@ -395,7 +431,7 @@ async function main() {
 
     if (duasFases && !check) {
       console.log("\n--- ativando na ordem: folhas, backend, origem pública ---");
-      for (const chave of ORDEM) {
+      for (const chave of deploymentOrder) {
         if (!versoes[chave]) continue;
         console.log(`  ${chave}`);
         ativar(PACOTES[chave].dir, config.workers[chave].name, versoes[chave]);

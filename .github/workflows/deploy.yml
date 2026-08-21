@@ -25,7 +25,7 @@ jobs:
       PUBLIC_URL: ${{ vars.POWERFARM_PUBLIC_URL }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with: { submodules: recursive, persist-credentials: false }
+        with: { submodules: recursive, persist-credentials: false, fetch-depth: 0 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 24 }
       - run: corepack enable
@@ -41,7 +41,7 @@ jobs:
       - run: pnpm --dir cloudflare-os install --frozen-lockfile
       - name: REGRA 2 — migration destrutiva aprovada pelo conteúdo
         run: node scripts/guards/check-migrations.mjs
-      - name: Gerar configs (dry-run)
+      - name: Gerar configs, testes e dry-run completo
         run: pnpm check
       - name: state/esperado.json em dia com o repo
         run: node scripts/derive-expected.mjs --check
@@ -50,11 +50,28 @@ jobs:
       - name: REGRA 4 — admin no fonte E no artefato gerado
         run: node scripts/guards/check-admins.mjs
 
-      # ---- leitura: token read-only, só neste step -----------------------
-      # Produção deve bater com o que FOI implantado por último, não com o
-      # estado desejado deste commit que ainda não chegou à produção.
+      - name: Selecionar o menor conjunto seguro de Workers
+        id: targets
+        run: |
+          TARGETS="$(node scripts/select-deploy-targets.mjs --base '${{ github.event.before }}' --head '${{ github.sha }}')"
+          WORKERS="$(node scripts/select-deploy-targets.mjs --base '${{ github.event.before }}' --head '${{ github.sha }}' --worker-names)"
+          case "$TARGETS" in
+            engine|identity|engine,identity) SELECTIVE_RUNTIME=true ;;
+            *) SELECTIVE_RUNTIME=false ;;
+          esac
+          echo "targets=$TARGETS" >> "$GITHUB_OUTPUT"
+          echo "workers=$WORKERS" >> "$GITHUB_OUTPUT"
+          echo "selective_runtime=$SELECTIVE_RUNTIME" >> "$GITHUB_OUTPUT"
+          echo "targets: $TARGETS"
+          echo "workers: $WORKERS"
+
+      # ---- leitura: token read-only, só nestes steps ----------------------
+      # Produção deve bater com o que FOI implantado por último. Workers que
+      # este próprio run vai reconciliar podem divergir (por exemplo, um hotfix
+      # manual); os Workers fora do escopo continuam protegidos contra drift.
       - name: Materializar referência do último deploy
         id: baseline
+        if: steps.targets.outputs.targets != 'none'
         run: |
           LAST=$(node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync("state/ultimo-deploy.json","utf8")); if(!x.commit) process.exit(2); process.stdout.write(x.commit)')
           git fetch --quiet --no-tags --depth=1 origin "$LAST"
@@ -62,33 +79,59 @@ jobs:
           echo "commit=$LAST" >> "$GITHUB_OUTPUT"
           echo "baseline do último deploy: ${LAST:0:12}"
 
-      - name: REGRA 1 — produção bate com o último deploy conhecido
+      - name: REGRA 1 — produção bate com o último deploy fora do escopo atual
+        if: steps.targets.outputs.targets != 'none'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
-        run: node scripts/check-drift.mjs --esperado /tmp/powerfarm-esperado-ultimo.json
+        run: node scripts/check-drift.mjs --esperado /tmp/powerfarm-esperado-ultimo.json --ignore-workers "${{ steps.targets.outputs.workers }}"
 
       - name: REGRA 7 — gravar pontos de volta
+        if: steps.targets.outputs.targets != 'none'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
         run: node scripts/record-versions.mjs --out versoes-antes.json
 
       # ---- escrita: token de deploy, só neste step -----------------------
-      - name: Deploy
+      - name: Deploy somente do escopo selecionado
         id: deploy
+        if: steps.targets.outputs.targets != 'none'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: pnpm deploy
+        run: |
+          TARGETS='${{ steps.targets.outputs.targets }}'
+          if [ '${{ steps.targets.outputs.selective_runtime }}' = 'true' ]; then
+            case ",$TARGETS," in
+              *,engine,*)
+                echo 'deploy seletivo: powerfarm-engine'
+                pnpm --dir packages/powerfarm-engine exec wrangler deploy --config wrangler.prod.jsonc
+                ;;
+            esac
+            case ",$TARGETS," in
+              *,identity,*)
+                echo 'deploy seletivo: powerfarm-gk-identity'
+                pnpm --dir packages/gatekeeper-identity exec wrangler deploy --config wrangler.prod.jsonc
+                ;;
+            esac
+          else
+            # Mudança de topologia/shared runtime exige convergência completa.
+            pnpm deploy
+          fi
 
-      - name: REGRA 8a — todo worker serve a versão deste run
+      - name: REGRA 8a — versões correspondem ao escopo deste run
         id: versoes
         if: steps.deploy.outcome == 'success'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
-        run: node scripts/verify-versions.mjs --antes versoes-antes.json
+        run: |
+          if [ '${{ steps.targets.outputs.selective_runtime }}' = 'true' ]; then
+            node scripts/verify-versions.mjs --antes versoes-antes.json --changed-workers "${{ steps.targets.outputs.workers }}"
+          else
+            node scripts/verify-versions.mjs --antes versoes-antes.json
+          fi
 
       - name: REGRA 8b — borda pública responde de verdade
         id: smoke
@@ -96,14 +139,14 @@ jobs:
         run: node scripts/smoke-test.mjs "$PUBLIC_URL"
 
       # ---- recuperação: dispara em QUALQUER falha acima do deploy --------
-      # Inclui o caso perigoso: pnpm deploy quebra no meio, smoke nem roda.
-      - name: Recuperar
+      # Inclui o caso perigoso: deploy quebra no meio, smoke nem roda.
+      - name: Recuperar somente Workers tocados
         if: failure() && steps.deploy.conclusion != 'skipped'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PUBLIC_URL: ${{ vars.POWERFARM_PUBLIC_URL }}
-        run: node scripts/rollback.mjs --from versoes-antes.json --verify
+        run: node scripts/rollback.mjs --from versoes-antes.json --only-workers "${{ steps.targets.outputs.workers }}" --verify
 
       # Só há incidente se algo chegou a ser escrito. Falha de portão (antes do
       # deploy) é o sistema funcionando, não incidente.
@@ -130,7 +173,7 @@ jobs:
 
       # ---- registro do que ficou no ar (prova, não fonte da verdade) -----
       - name: Registrar deploy conhecido
-        if: success()
+        if: success() && steps.targets.outputs.targets != 'none'
         run: |
           node scripts/record-versions.mjs --out state/ultimo-deploy.json
           git config user.name  "powerfarm-ci"
