@@ -123,10 +123,7 @@ jobs:
         if: steps.scope.outputs.skip != 'true'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # Este job executa somente o check-drift vindo da main confiável.
-          # O secret read-only está inválido (401); o token operacional entra
-          # apenas nesta etapa, depois da instalação sem credenciais.
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
         run: node scripts/check-drift.mjs --esperado /tmp/powerfarm-pr-esperado.json
 
       - name: Drift será reconciliado integralmente pelo merge

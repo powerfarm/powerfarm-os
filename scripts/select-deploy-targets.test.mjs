@@ -46,10 +46,3 @@ test("deploy compares against the last successfully deployed commit", async () =
   assert.match(workflow, /select-deploy-targets\.mjs --base "\$LAST" --head/);
   assert.doesNotMatch(workflow, /select-deploy-targets\.mjs --base '\$\{\{ github\.event\.before \}\}'/);
 });
-
-test("trusted PR drift uses the working Cloudflare token", async () => {
-  const workflow = await readFile(resolve(root, ".github/workflows/pr.yml"), "utf8");
-  const driftStep = workflow.slice(workflow.indexOf("REGRA 1 — produção bate"));
-  assert.match(driftStep, /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/);
-  assert.doesNotMatch(driftStep, /CLOUDFLARE_API_TOKEN_READONLY/);
-});
