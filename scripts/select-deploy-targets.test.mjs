@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { DEPLOYMENT_ORDER, selectDeploymentTargets } from "./select-deploy-targets.mjs";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 test("identity-only changes redeploy only Identity", () => {
   assert.deepEqual(
@@ -33,4 +38,11 @@ test("docs and workflow-only edits do not redeploy Workers", () => {
     selectDeploymentTargets(["docs/runtime.md", ".github/workflows/pr.yml", "README.md"]),
     [],
   );
+});
+
+test("deploy compares against the last successfully deployed commit", async () => {
+  const workflow = await readFile(resolve(root, ".github/workflows/deploy.yml"), "utf8");
+  assert.match(workflow, /LAST=.*state\/ultimo-deploy\.json/);
+  assert.match(workflow, /select-deploy-targets\.mjs --base "\$LAST" --head/);
+  assert.doesNotMatch(workflow, /select-deploy-targets\.mjs --base '\$\{\{ github\.event\.before \}\}'/);
 });
