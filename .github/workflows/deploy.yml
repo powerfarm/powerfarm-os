@@ -71,7 +71,7 @@ jobs:
           echo "targets: $TARGETS"
           echo "workers: $WORKERS"
 
-      # ---- leitura: token read-only, só nestes steps ----------------------
+      # ---- leitura de settings: token read-only só no drift -------------
       # Produção deve bater com o que FOI implantado por último. Workers que
       # este próprio run vai reconciliar podem divergir (por exemplo, um hotfix
       # manual); os Workers fora do escopo continuam protegidos contra drift.
@@ -92,6 +92,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
         run: node scripts/check-drift.mjs --esperado /tmp/powerfarm-esperado-ultimo.json --ignore-workers "${{ steps.targets.outputs.workers }}"
 
+      # /deployments exige o token operacional; o read-only é insuficiente.
       - name: REGRA 7 — gravar pontos de volta
         if: steps.targets.outputs.targets != 'none'
         env:
@@ -131,7 +132,7 @@ jobs:
         if: steps.deploy.outcome == 'success'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           if [ '${{ steps.targets.outputs.selective_runtime }}' = 'true' ]; then
             node scripts/verify-versions.mjs --antes versoes-antes.json --changed-workers "${{ steps.targets.outputs.workers }}"
@@ -193,5 +194,5 @@ jobs:
           git push "https://x-access-token:${GH_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           GH_PUSH_TOKEN: ${{ github.token }}
