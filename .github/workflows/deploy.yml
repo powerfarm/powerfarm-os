@@ -53,8 +53,12 @@ jobs:
       - name: Selecionar o menor conjunto seguro de Workers
         id: targets
         run: |
-          TARGETS="$(node scripts/select-deploy-targets.mjs --base '${{ github.event.before }}' --head '${{ github.sha }}')"
-          WORKERS="$(node scripts/select-deploy-targets.mjs --base '${{ github.event.before }}' --head '${{ github.sha }}' --worker-names)"
+          # A dívida de um deploy falhado não desaparece no push seguinte.
+          # Compare sempre com o último commit efetivamente implantado, não
+          # apenas com o commit imediatamente anterior no GitHub.
+          LAST=$(node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync("state/ultimo-deploy.json","utf8")); if(!x.commit) process.exit(2); process.stdout.write(x.commit)')
+          TARGETS="$(node scripts/select-deploy-targets.mjs --base "$LAST" --head '${{ github.sha }}')"
+          WORKERS="$(node scripts/select-deploy-targets.mjs --base "$LAST" --head '${{ github.sha }}' --worker-names)"
           case "$TARGETS" in
             engine|identity|engine,identity) SELECTIVE_RUNTIME=true ;;
             *) SELECTIVE_RUNTIME=false ;;
@@ -62,6 +66,8 @@ jobs:
           echo "targets=$TARGETS" >> "$GITHUB_OUTPUT"
           echo "workers=$WORKERS" >> "$GITHUB_OUTPUT"
           echo "selective_runtime=$SELECTIVE_RUNTIME" >> "$GITHUB_OUTPUT"
+          echo "baseline_commit=$LAST" >> "$GITHUB_OUTPUT"
+          echo "baseline do último deploy: ${LAST:0:12}"
           echo "targets: $TARGETS"
           echo "workers: $WORKERS"
 
