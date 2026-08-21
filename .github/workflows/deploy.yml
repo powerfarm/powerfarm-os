@@ -71,7 +71,6 @@ jobs:
           echo "targets: $TARGETS"
           echo "workers: $WORKERS"
 
-      # ---- leitura de settings: token read-only só no drift -------------
       # Produção deve bater com o que FOI implantado por último. Workers que
       # este próprio run vai reconciliar podem divergir (por exemplo, um hotfix
       # manual); os Workers fora do escopo continuam protegidos contra drift.
@@ -85,11 +84,24 @@ jobs:
           echo "commit=$LAST" >> "$GITHUB_OUTPUT"
           echo "baseline do último deploy: ${LAST:0:12}"
 
-      - name: REGRA 1 — produção bate com o último deploy fora do escopo atual
+      # Primeiro usa a credencial mínima. A secret read-only antiga pode estar
+      # inválida/sem escopo; nesse caso repetimos A MESMA checagem com a
+      # credencial operacional do environment de produção. Drift verdadeiro
+      # continua falhando na segunda execução e bloqueia qualquer escrita.
+      - name: REGRA 1a — drift com credencial read-only
+        id: drift_readonly
         if: steps.targets.outputs.targets != 'none'
+        continue-on-error: true
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+        run: node scripts/check-drift.mjs --esperado /tmp/powerfarm-esperado-ultimo.json --ignore-workers "${{ steps.targets.outputs.workers }}"
+
+      - name: REGRA 1b — repetir drift com credencial operacional se necessário
+        if: steps.targets.outputs.targets != 'none' && steps.drift_readonly.outcome == 'failure'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/check-drift.mjs --esperado /tmp/powerfarm-esperado-ultimo.json --ignore-workers "${{ steps.targets.outputs.workers }}"
 
       # /deployments exige o token operacional; o read-only é insuficiente.

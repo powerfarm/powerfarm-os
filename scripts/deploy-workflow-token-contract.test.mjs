@@ -23,8 +23,26 @@ test("deployment-version API consumers use the operational Cloudflare token", ()
   }
 });
 
-test("drift settings read remains least privilege", () => {
-  const driftStep = steps.find((step) => step.includes("check-drift.mjs"));
-  assert.ok(driftStep, "deploy workflow must keep a drift gate");
-  assert.match(driftStep, readonlyToken);
+test("production drift prefers read-only and retries the same guard with operational auth", () => {
+  const driftSteps = steps.filter((step) => step.includes("check-drift.mjs"));
+  assert.equal(driftSteps.length, 2, "expected a least-privilege attempt plus one authenticated fallback");
+
+  const primary = driftSteps.find((step) => step.includes("REGRA 1a"));
+  const fallback = driftSteps.find((step) => step.includes("REGRA 1b"));
+  assert.ok(primary, "primary drift step must exist");
+  assert.ok(fallback, "fallback drift step must exist");
+
+  assert.match(primary, readonlyToken);
+  assert.doesNotMatch(primary, operationalToken);
+  assert.match(primary, /continue-on-error:\s*true/);
+  assert.match(primary, /id:\s*drift_readonly/);
+
+  assert.match(fallback, operationalToken);
+  assert.doesNotMatch(fallback, readonlyToken);
+  assert.match(fallback, /steps\.drift_readonly\.outcome\s*==\s*'failure'/);
+
+  const primaryCommand = primary.match(/run:\s*(node scripts\/check-drift\.mjs[^\n]*)/)?.[1];
+  const fallbackCommand = fallback.match(/run:\s*(node scripts\/check-drift\.mjs[^\n]*)/)?.[1];
+  assert.ok(primaryCommand && fallbackCommand, "both drift steps must execute the drift guard");
+  assert.equal(fallbackCommand, primaryCommand, "fallback must repeat exactly the same drift check");
 });
