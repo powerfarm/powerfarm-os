@@ -1,30 +1,34 @@
 {
-  "gravadoEm": "2026-08-18T07:00:35.620Z",
-  "commit": "473cc4c73f55bd4c0159fc6104a67216f736cfdb",
+  "gravadoEm": "2026-08-18T19:34:37.147Z",
+  "commit": "2965de1549db78d2fcbab9b3f928f5d859aa89e5",
   "workers": {
     "powerfarm-backend": {
-      "deploymentId": "cbee3d16-4484-40f8-9ed1-5f02c347833f",
-      "versionId": "e3e3ca6a-5e9f-4284-8c3f-30c109385129"
+      "deploymentId": "a1d5dc09-f2af-4a9e-8f0b-7aac14b9a688",
+      "versionId": "26ddc991-1bbc-40f3-a826-f289656c032f"
     },
     "powerfarm": {
-      "deploymentId": "00dc26d1-3e31-415e-b8b6-17b7c8c5fc30",
-      "versionId": "faeae5b4-2e29-4b4f-8f63-04eebcf7dce8"
+      "deploymentId": "619529e6-0389-4fbb-86ec-326d08226db7",
+      "versionId": "3eacaac3-95f8-46f1-8fbf-f793b3245622"
     },
     "powerfarm-gk-context": {
-      "deploymentId": "722f860f-db0c-479d-89c5-e365643dfbfc",
-      "versionId": "d00e2dd0-eb65-4bd0-814f-136db5a74ec4"
+      "deploymentId": "a51d080f-4ddb-427c-9374-3fe8e7320b31",
+      "versionId": "1d9a1177-b9dc-4278-bbba-75f6274d95a5"
     },
     "powerfarm-gk-scheduler": {
-      "deploymentId": "154af8ad-1090-4ebb-b3da-05cd56875be6",
-      "versionId": "81b0497c-600e-42a0-a0da-1512b537811e"
+      "deploymentId": "0e00b148-323f-4fe2-b75d-dbda02843323",
+      "versionId": "3f9f071d-63aa-4472-8a25-4448ce909159"
     },
     "powerfarm-gk-custom": {
-      "deploymentId": "b5318664-21e1-4685-96e8-aea88d3e8842",
-      "versionId": "0d8008fc-93c6-41d8-acbb-6df4aac410aa"
+      "deploymentId": "792ae200-003d-47aa-a410-b39db8a452bd",
+      "versionId": "fef3a8dc-89c2-49c9-a9c7-5d838479fbf8"
+    },
+    "powerfarm-gk-identity": {
+      "deploymentId": "b3e0be3f-5449-44f7-a5f4-b77b83c2b9eb",
+      "versionId": "fdd32c8b-b8e3-40af-90e6-df13a3820b13"
     },
     "powerfarm-error-reporter": {
-      "deploymentId": "52162f3a-b02c-4b42-b712-88d925f64d53",
-      "versionId": "d3706393-f46e-48f7-b74e-8edfa8048c0d"
+      "deploymentId": "1ebb0c05-e71b-47c6-81db-3ef5b5097e26",
+      "versionId": "9628ee11-72f0-4b51-8ed9-5c4801319d53"
     }
   }
 }
